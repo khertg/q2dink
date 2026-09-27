@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkIn, createSession, nextGroup, nextUpStandIn, recordScore, startGame } from '@/rotation/engine'
+import { checkIn, createSession, lockPartners, nextGroup, nextUpStandIn, recordScore, startGame } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { removalNotice, removedMessage } from './removal'
 
@@ -41,5 +41,12 @@ describe('removedMessage', () => {
     const five = withPlayers(5)
     const [first] = five.queue
     expect(removedMessage(five, first)).toMatch(/^P1 left the session\. P5 is next up instead\.$/)
+  })
+})
+
+describe('removing a locked player', () => {
+  it('says their partner lock ends', () => {
+    const s = lockPartners(withPlayers(4), 1, 2)
+    expect(removalNotice(s, 1)).toBe('Their partner lock with P2 ends. They can be checked in again later.')
   })
 })

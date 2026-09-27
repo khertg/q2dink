@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, recordWin, startSession, startGame } from './helpers'
+import { checkIn, choose, confirmLock, recordWin, startSession, startGame } from './helpers'
 
 const MODES = ['Auto-balanced', 'Skill-separated', 'Winners vs. Losers', 'Mixed doubles']
 
@@ -78,6 +78,7 @@ test.describe('partner locking', () => {
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Cy')
     await page.getByRole('button', { name: 'Lock partners' }).click()
+    await confirmLock(page)
     await expect(page.getByText('Ann & Cy')).toBeVisible()
 
     await checkIn(page, ['Dee'])
@@ -102,6 +103,7 @@ test.describe('partner locking', () => {
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Bob')
     await page.getByRole('button', { name: 'Lock partners' }).click()
+    await confirmLock(page)
     await expect(page.getByText('Ann & Bob')).toBeVisible()
 
     await page.getByRole('button', { name: 'Unlock Ann and Bob' }).click()
@@ -121,6 +123,7 @@ test.describe('partner locking', () => {
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Bob')
     await page.getByRole('button', { name: 'Lock partners' }).click()
+    await confirmLock(page)
     await page.getByRole('tab', { name: 'Board' }).click()
     await expect(page.getByLabel('Locked with Bob')).toBeVisible()
     await expect(page.getByLabel('Locked with Ann')).toBeVisible()

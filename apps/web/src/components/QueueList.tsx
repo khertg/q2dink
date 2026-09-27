@@ -1,5 +1,3 @@
-import { Lock } from 'lucide-react'
-import { partnerOf } from '@/matchmaking/grouping'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -9,6 +7,7 @@ import type { PartnerOption } from '@/components/partnerItem'
 import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
+import { heldFor, lockMarks } from '@/lib/partners'
 import { useSessionNow } from '@/lib/time'
 import type { SessionState } from '@/rotation/types'
 
@@ -38,6 +37,7 @@ export function QueueList({
   editable = false,
 }: Props) {
   const now = useSessionNow()
+  const marks = lockMarks(session)
   return (
     <Card>
       <CardHeader>
@@ -51,27 +51,25 @@ export function QueueList({
           <ol className="divide-y">
             {session.queue.map((id, index) => {
               const player = session.players[id]
-              const partner = partnerOf(session.partners, id)
               const queuedAt = session.queuedAt?.[id]
+              const held = heldFor(session, id)
               return (
                 <li key={id} className="flex items-center gap-3 py-2">
                   <span className="w-6 text-sm text-muted-foreground">{index + 1}</span>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <PlayerAvatar name={player.name} size="sm" editable={editable} viewable />
+                    <PlayerAvatar name={player.name} size="sm" editable={editable} viewable lock={marks.get(id)} />
                     <span className="min-w-0 truncate">{player.name}</span>
-                    {partner !== undefined && (
-                      <Lock
-                        className="size-3 text-muted-foreground"
-                        aria-label={`Locked with ${session.players[partner]?.name}`}
-                      />
-                    )}
                   </span>
                   <SkillBadge
                     player={player}
                     onChange={onSkillChange ? (skill) => onSkillChange(id, skill) : undefined}
                   />
                   <span className="w-20 text-right text-sm text-muted-foreground">
-                    {nextUp.includes(id) ? (
+                    {held ? (
+                      <span className="text-xs leading-tight" title={`${held.partner} is ${held.where}`}>
+                        Waits for {held.partner}
+                      </span>
+                    ) : nextUp.includes(id) ? (
                       <Badge>Next up</Badge>
                     ) : queuedAt !== undefined ? (
                       <WaitingTime seconds={(now - queuedAt) / 1000} />

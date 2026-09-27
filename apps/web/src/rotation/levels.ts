@@ -1,5 +1,5 @@
 import type { SkillLevel } from '@/db/db'
-import { partnerOf } from '@/matchmaking/grouping'
+import { isHeld, partnerOf } from '@/matchmaking/grouping'
 import type { Court, SessionState } from './types'
 
 /**
@@ -49,14 +49,14 @@ export function lanesOf(courts: Court[]): (LevelRange | undefined)[] {
 
 /**
  * The queue as one lane sees it: players in range, in queue order, leaving out anyone already taken by
- * an earlier lane. A locked pair plays together or not at all, so a player whose waiting partner is
- * left out (out of range or taken) is left out too.
+ * an earlier lane. A locked pair plays together or not at all, so a player whose partner is left out
+ * (out of range, taken, or not waiting: see isHeld) is left out too.
  */
 export function laneQueue(state: SessionState, levels: LevelRange | undefined, taken: ReadonlySet<number>): number[] {
   const fits = (id: number) => !taken.has(id) && inLevels(state.players[id]?.skill ?? 0, levels)
   return state.queue.filter((id) => {
-    if (!fits(id)) return false
+    if (!fits(id) || isHeld(state, id)) return false
     const partner = partnerOf(state.partners, id)
-    return partner === undefined || !state.queue.includes(partner) || fits(partner)
+    return partner === undefined || fits(partner)
   })
 }

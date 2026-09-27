@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, playerAction, recordWin, startGame, startSession, waitingAction } from './helpers'
+import { checkIn, choose, confirmLock, playerAction, recordWin, startGame, startSession, waitingAction } from './helpers'
 
 const SIX = ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay']
 const EIGHT = [...SIX, 'Gus', 'Hal']
@@ -119,12 +119,17 @@ test.describe('swapping a player on a court', () => {
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Bob')
     await page.getByRole('button', { name: 'Lock partners' }).click()
+    await confirmLock(page)
     await page.getByRole('tab', { name: 'Board' }).click()
     await startGame(page)
 
     await playerAction(court(page), 'Ann', 'Swap…')
     await page.getByRole('dialog', { name: 'Replace Ann' }).getByRole('button', { name: /Eve/ }).click()
-    await expect(page.getByText('Their partner lock was removed.')).toBeVisible()
+    // Asked first: the swap ends the lock.
+    const ask = page.getByRole('dialog', { name: 'Unlock Ann and Bob?' })
+    await expect(ask).toContainText('Taking Ann off Court 1 ends the partner lock of Ann & Bob.')
+    await ask.getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText('Ann and Bob are no longer locked partners.')).toBeVisible()
   })
 })
 
@@ -273,11 +278,13 @@ test.describe('changing who is next up', () => {
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Bob')
     await page.getByRole('button', { name: 'Lock partners' }).click()
+    await confirmLock(page)
     await page.getByRole('tab', { name: 'Board' }).click()
 
     await playerAction(nextUp(page), 'Ann', 'Swap…')
     await page.getByRole('dialog').getByRole('button', { name: /Eve/ }).click()
-    await expect(page.getByText('Partner locks were removed.')).toBeVisible()
+    await page.getByRole('dialog', { name: 'Unlock Ann and Bob?' }).getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText(/Ann and Bob are no longer locked partners\./)).toBeVisible()
   })
 })
 

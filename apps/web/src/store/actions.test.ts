@@ -233,3 +233,22 @@ describe('levels on the session’s scale', () => {
     expect(result.session.players[1].skill).toBe(2)
   })
 })
+
+describe('locking now across devices', () => {
+  // Ann=1 … Eve=5; Court 1 is Ann & Bob vs Cy & Dee; Eve waits.
+  const playing = apply(createSession('doubles', 1), checkIn('Ann', 'Bob', 'Cy', 'Dee', 'Eve'), { type: 'startGame', courtId: 1, now: 0 })
+
+  it('puts the lock in force with lockNow, and keeps an older app’s lock (no lockNow) waiting for a game', () => {
+    const now = apply(playing, { type: 'lockPartners', a: 5, b: 1, lockNow: true })
+    expect(now.partners).toEqual([[5, 1]])
+    const older = apply(playing, { type: 'lockPartners', a: 5, b: 1 })
+    expect(older.pendingPartners).toHaveLength(1)
+  })
+
+  it('still applies when replayed on a club copy where the waiting partner was put on a court meanwhile', () => {
+    const club = apply(createSession('doubles', 2), checkIn('Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal'), { type: 'startGame', courtId: 1, now: 0 }, { type: 'startGame', courtId: 2, now: 0 })
+    const result = rebase(club, [{ action: { type: 'lockPartners', a: 1, b: 5, lockNow: true } }])
+    expect(result.dropped).toEqual([])
+    expect(result.session.partners).toEqual([[1, 5]])
+  })
+})

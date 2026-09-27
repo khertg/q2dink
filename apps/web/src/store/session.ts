@@ -175,7 +175,8 @@ interface SessionStore {
   /** Go back to the automatic next group. */
   resetNextUp: () => void
   /** Lock two checked-in players as doubles partners. */
-  lockPartners: (a: number, b: number) => void
+  /** `now`: in force at once even while one of them is away (see LockOptions in the engine). */
+  lockPartners: (a: number, b: number, now?: boolean) => void
   unlockPartners: (playerId: number) => void
   /** Replace the running session, for example one resumed from the cloud on another device. */
   loadSession: (location: string, session: SessionState, meta?: ResumeMeta) => void
@@ -464,7 +465,7 @@ export const useSessionStore = create<SessionStore>()(
 
         resetNextUp: () => dispatch({ type: 'resetNextUp' }, null),
 
-        lockPartners: (a, b) => dispatch({ type: 'lockPartners', a, b }, null),
+        lockPartners: (a, b, now) => dispatch({ type: 'lockPartners', a, b, ...(now ? { lockNow: true } : {}) }, null),
 
         unlockPartners: (playerId) => dispatch({ type: 'unlockPartners', playerId }, null),
 

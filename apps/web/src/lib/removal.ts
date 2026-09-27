@@ -1,3 +1,4 @@
+import { lockedPartner } from '@/lib/partners'
 import { hasPlayed, nextUpStandIn } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 
@@ -12,10 +13,12 @@ export function removalNotice(session: SessionState, playerId: number): string {
     : standIn !== undefined
       ? `${session.players[standIn].name} takes their place in Next up.`
       : ''
+  const locked = lockedPartner(session, playerId)
+  const lock = locked ? `Their partner lock with ${session.players[locked.partnerId]?.name ?? 'their partner'} ends.` : ''
   const results = hasPlayed(session, playerId)
     ? 'Their results stay in Standings, and they can be checked in again later.'
     : 'They can be checked in again later.'
-  return [spot, results].filter(Boolean).join(' ')
+  return [spot, lock, results].filter(Boolean).join(' ')
 }
 
 /** The toast after removing a player: `before` is the session just before the change. */

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, openSessionMenu, recordWin, startGame, startSession } from './helpers'
+import { checkIn, choose, confirmLock, openSessionMenu, recordWin, startGame, startSession } from './helpers'
 
 const card = (page: Page) => page.getByRole('group', { name: 'Partners and opponents' })
 
@@ -11,6 +11,7 @@ async function lockedPairSession(page: Page) {
   await choose(page, 'First partner', 'Ann')
   await choose(page, 'Second partner', 'Bob')
   await page.getByRole('button', { name: 'Lock partners' }).click()
+  await confirmLock(page)
   await expect(page.getByText('Ann & Bob')).toBeVisible()
   await page.getByRole('tab', { name: 'Board' }).click()
 }

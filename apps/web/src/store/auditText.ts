@@ -1,4 +1,5 @@
 import type { SkillLevel } from '@/db/db'
+import { brokenLocks, pairNames } from '@/lib/partners'
 import { levelLabel, sessionScale, skillLabel } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
 import type { SessionState } from '@/rotation/types'
@@ -22,7 +23,12 @@ export function describeAction(before: SessionState, action: SessionAction, afte
     before.courts.find((c) => c.id === id)?.name ?? after.courts.find((c) => c.id === id)?.name ?? `Court ${id}`
   const lineUp = (teams: readonly (readonly number[])[]) => `${names(teams[0])} vs ${names(teams[1])}`
   const courtTeams = (id: number, state: SessionState) => state.courts.find((c) => c.id === id)?.teams ?? null
-  const say = (summary: string): AuditText => ({ kind: action.type, summary })
+  // Any lock the change ended is named at the end of its line (an explicit unlock says so itself).
+  const unlocked = action.type === 'unlockPartners' || action.type === 'restore' ? [] : brokenLocks(before, after)
+  const say = (summary: string): AuditText => ({
+    kind: action.type,
+    summary: unlocked.length > 0 ? `${summary}. Unlocked ${pairNames(before, unlocked)}` : summary,
+  })
 
   switch (action.type) {
     case 'setAvgGameMinutes':
@@ -110,8 +116,14 @@ export function describeAction(before: SessionState, action: SessionAction, afte
       return say(`Next up: ${name(action.playerId)} into an open spot`)
     case 'resetNextUp':
       return say('Next up: back to automatic')
-    case 'lockPartners':
-      return say(`Locked ${name(action.a)} & ${name(action.b)} as partners`)
+    case 'lockPartners': {
+      const pair = `${name(action.a)} & ${name(action.b)}`
+      const waiting = (after.pendingPartners ?? []).some(({ pair: p }) => p.includes(action.a) && p.includes(action.b))
+      if (waiting) return say(`Locked ${pair} as partners, starting once both have played`)
+      const held = !before.queue.includes(action.a) || !before.queue.includes(action.b)
+      const sameGame = before.courts.some((c) => c.teams?.flat().includes(action.a) && c.teams.flat().includes(action.b))
+      return say(action.lockNow && held && !sameGame ? `Locked ${pair} as partners now: they wait for each other` : `Locked ${pair} as partners`)
+    }
     case 'unlockPartners': {
       const pair = [...before.partners, ...(before.pendingPartners ?? []).map((p) => p.pair)].find((p) =>
         p.includes(action.playerId),

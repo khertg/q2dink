@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { failOnCspViolations } from '../cspWatch'
-import { checkIn, openFromList, openSessionMenu, startGame, startSession } from '../helpers'
+import { checkIn, choose, confirmLock, openFromList, openSessionMenu, playerAction, startGame, startSession } from '../helpers'
 import { apiCreateClub, bearer, expectSignedIn, nameDevice, storedToken, uiLogin, uniqueClub, type TestClub } from './support'
 
 failOnCspViolations(test)
@@ -149,4 +149,33 @@ test('club activity is paged 20 at a time and can be searched', async ({ page, r
   await expect(pages.getByText('Page 1 of 3')).toBeVisible()
   await log.getByLabel('Search activity').fill('P4')
   await expect(rows).toHaveCount(7)
+})
+
+test('the log says which partners a change unlocked, and by what', async ({ page, request }) => {
+  const club = uniqueClub('Audit')
+  await apiCreateClub(request, club)
+  await page.goto('/')
+  await uiLogin(page, club)
+  await expectSignedIn(page)
+  await startSession(page, { location: 'Lock Night' })
+  await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay'])
+  await startGame(page)
+  const court = page.getByRole('region', { name: 'Court 1', exact: true })
+  const blue = await court.getByRole('group', { name: 'Blue' }).locator('li').allInnerTexts()
+  const [a, b] = blue.map((row) => row.split('\n')[0].trim())
+
+  await page.getByRole('tab', { name: 'Check-in' }).click()
+  await choose(page, 'First partner', a)
+  await choose(page, 'Second partner', b)
+  await page.getByRole('button', { name: 'Lock partners' }).click()
+  await confirmLock(page)
+  await page.getByRole('tab', { name: 'Board' }).click()
+
+  await playerAction(court, a, 'Remove from court')
+  await page.getByRole('dialog', { name: `Unlock ${a} and ${b}?` }).getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByText(`${a} and ${b} are no longer locked partners.`).first()).toBeVisible()
+
+  const activity = await openActivity(page)
+  await expect(activity.getByText(`Court 1: took ${a} off, spot left open. Unlocked ${a} & ${b}`)).toBeVisible(FOLLOW)
+  await expect(activity.getByText(`Locked ${a} & ${b} as partners`, { exact: true })).toBeVisible()
 })

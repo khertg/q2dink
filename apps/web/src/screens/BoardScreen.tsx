@@ -13,12 +13,19 @@ import { playerStatuses } from '@/lib/playerStatus'
 import { removedMessage } from '@/lib/removal'
 import { levelLabel, sessionScale } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
+import { locksBrokenBy } from '@/lib/lockGuard'
+import { breakNote, lockMarks, unlockedSentence } from '@/lib/partners'
+import { useLockGuard } from '@/lib/useLockGuard'
+import type { SessionAction } from '@/store/actions'
 import { usePartnerOption } from '@/lib/usePartnerOption'
 import { useSkillEditor } from '@/lib/useSkillEditor'
 import { isNextUpPicked, nextGroup, nextGroups, nextUpSpots, nextUpStandIn, sessionStatus, type NextGroup } from '@/rotation/engine'
 import { hasLevelCourts, sameLevels } from '@/rotation/levels'
 import type { Court, SessionState, Teams } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
+
+/** When a previewed change would happen (only the order of events matters to it, never the exact time). */
+const clock = () => Date.now()
 
 export function BoardScreen({ session }: { session: SessionState }) {
   const recordScore = useSessionStore((s) => s.recordScore)
@@ -39,6 +46,8 @@ export function BoardScreen({ session }: { session: SessionState }) {
   // The player whose partner is being chosen, while that dialog is open.
   const [locking, setLocking] = useState<number | null>(null)
   const partnerFor = usePartnerOption(session, setLocking)
+  const { guard, dialog: lockGuardDialog } = useLockGuard(session)
+  const marks = lockMarks(session)
   const editMatch = useSessionStore((s) => s.editMatch)
   const changeSkill = useSkillEditor()
 
@@ -115,29 +124,32 @@ export function BoardScreen({ session }: { session: SessionState }) {
     toast(`${courtName(courtId)} started`)
   }
 
-  /** Whether the player is in a partner lock, in force or waiting. */
-  const hasLock = (id: number) =>
-    [...session.partners, ...(session.pendingPartners ?? []).map(({ pair }) => pair)].some((pair) => pair.includes(id))
+  /** The end of a message when a change ended partner locks (staff were asked first). */
+  const unlockedNote = (pairs: [number, number][]) => (pairs.length === 0 ? '' : ` ${unlockedSentence(session, pairs)}`)
 
   function handleReplace(courtId: number, outId: number, inId: number, sendOnBreak: boolean) {
     const from = statusOf(inId)
     const out = session.players[outId].name
     const into = session.players[inId].name
     if (from?.place === 'court') {
-      const wasLocked = hasLock(outId) || hasLock(inId)
-      replacePlayer(courtId, outId, inId)
-      const where =
-        from.courtId === courtId ? `on ${courtName(courtId)}` : `(${courtName(courtId)} ↔ ${courtName(from.courtId!)})`
-      toast(`${into} and ${out} traded places ${where}.` + (wasLocked ? ' Partner locks were removed.' : ''))
+      const action: SessionAction = { type: 'replacePlayer', courtId, outId, inId, now: clock() }
+      guard(action, `Swapping ${out} and ${into}`, (pairs) => {
+        replacePlayer(courtId, outId, inId)
+        const where =
+          from.courtId === courtId ? `on ${courtName(courtId)}` : `(${courtName(courtId)} ↔ ${courtName(from.courtId!)})`
+        toast(`${into} and ${out} traded places ${where}.` + unlockedNote(pairs))
+      })
       return
     }
-    const wasLocked = hasLock(outId)
-    replacePlayer(courtId, outId, inId, { sendOnBreak })
-    toast(
-      `${into}${from?.place === 'break' ? ' is back from a break and' : ''} replaced ${out}. ` +
-        `${out} ${sendOnBreak ? 'is on a break' : from?.place === 'nextUp' ? `takes ${into}'s spot in Next up` : 'is first in the queue'}.` +
-        (wasLocked ? ' Their partner lock was removed.' : ''),
-    )
+    const action: SessionAction = { type: 'replacePlayer', courtId, outId, inId, options: { sendOnBreak }, now: clock() }
+    guard(action, `Taking ${out} off ${courtName(courtId)}`, (pairs) => {
+      replacePlayer(courtId, outId, inId, { sendOnBreak })
+      toast(
+        `${into}${from?.place === 'break' ? ' is back from a break and' : ''} replaced ${out}. ` +
+          `${out} ${sendOnBreak ? 'is on a break' : from?.place === 'nextUp' ? `takes ${into}'s spot in Next up` : 'is first in the queue'}.` +
+          unlockedNote(pairs),
+      )
+    })
   }
 
   function handleReplaceNextUp(outId: number, inId: number) {
@@ -145,29 +157,39 @@ export function BoardScreen({ session }: { session: SessionState }) {
     const out = session.players[outId].name
     const into = session.players[inId].name
     const sameGroup = from?.place === 'nextUp' && from.lane === statusOf(outId)?.lane
-    const wasLocked = !sameGroup && (hasLock(outId) || hasLock(inId))
-    replaceNextUp(outId, inId)
-    const message = sameGroup
-      ? `${into} and ${out} changed places in Next up.`
-      : from?.place === 'court'
-        ? `${into} and ${out} traded places: ${out} is on ${courtName(from.courtId!)}, ${into} is next up.`
-        : from?.place === 'break'
-          ? `${into} is back from a break and next up instead of ${out}.`
-          : `${into} is next up instead of ${out}.`
-    toast(message + (wasLocked ? ' Partner locks were removed.' : ''))
+    guard({ type: 'replaceNextUp', outId, inId, now: clock() }, `Swapping ${into} into Next up`, (pairs) => {
+      replaceNextUp(outId, inId)
+      const message = sameGroup
+        ? `${into} and ${out} changed places in Next up.`
+        : from?.place === 'court'
+          ? `${into} and ${out} traded places: ${out} is on ${courtName(from.courtId!)}, ${into} is next up.`
+          : from?.place === 'break'
+            ? `${into} is back from a break and next up instead of ${out}.`
+            : `${into} is next up instead of ${out}.`
+      toast(message + unlockedNote(pairs))
+    })
   }
 
   /** Take a player off a court: their spot stays open and the game pauses until someone fills it. */
   function handleOffCourt(courtId: number, outId: number, onBreak: boolean) {
-    const wasLocked = hasLock(outId)
     const staged = session.courts.find((c) => c.id === courtId)?.notStarted
-    removeFromCourt(courtId, outId, onBreak)
     const out = session.players[outId].name
-    toast(
-      `${out} is off ${courtName(courtId)} and ${onBreak ? 'on a break' : 'first in the queue'}.` +
-        (staged ? '' : ' The game is paused until the spot is filled.') +
-        (wasLocked ? ' Their partner lock was removed.' : ''),
-    )
+    const action: SessionAction = { type: 'removeFromCourt', courtId, playerId: outId, onBreak, now: clock() }
+    guard(action, `Taking ${out} off ${courtName(courtId)}`, (pairs) => {
+      removeFromCourt(courtId, outId, onBreak)
+      toast(
+        `${out} is off ${courtName(courtId)} and ${onBreak ? 'on a break' : 'first in the queue'}.` +
+          (staged ? '' : ' The game is paused until the spot is filled.') +
+          unlockedNote(pairs),
+      )
+    })
+  }
+
+  /** A waiting player takes a break; their partner (if locked) now waits for them. */
+  function handleQueueBreak(id: number) {
+    checkOutPlayer(id)
+    const note = breakNote(useSessionStore.getState().session ?? session, id)
+    if (note) toast(note)
   }
 
   /** Put someone in an open spot on a court: a game missing a player, or a court being set up by hand. */
@@ -188,14 +210,21 @@ export function BoardScreen({ session }: { session: SessionState }) {
   function handleOffNextUp(outId: number, onBreak: boolean) {
     const standIn = nextUpStandIn(session, outId)
     const out = session.players[outId].name
-    dropFromNextUp(outId, onBreak)
-    if (!nextUpIds.includes(outId)) {
-      // Pinned into a group that has not formed yet: their spot is simply open again.
-      toast(onBreak ? `${out} is on a break.` : `${out} is no longer pinned to Next up.`)
-      return
-    }
-    const instead = standIn === undefined ? '' : `${session.players[standIn].name} is next up instead`
-    toast(onBreak ? `${out} is on a break.${instead ? ` ${instead}.` : ''}` : `${instead} of ${out}.`)
+    guard({ type: 'dropFromNextUp', playerId: outId, onBreak }, `Taking ${out} out of Next up`, (pairs) => {
+      dropFromNextUp(outId, onBreak)
+      if (!nextUpIds.includes(outId)) {
+        // Pinned into a group that has not formed yet: their spot is simply open again.
+        toast((onBreak ? `${out} is on a break.` : `${out} is no longer pinned to Next up.`) + unlockedNote(pairs))
+        return
+      }
+      const instead = standIn === undefined ? '' : `${session.players[standIn].name} is next up instead`
+      const waits = onBreak ? breakNote(useSessionStore.getState().session ?? session, outId) : ''
+      toast(
+        (onBreak ? `${out} is on a break.${instead ? ` ${instead}.` : ''}` : `${instead} of ${out}.`) +
+          unlockedNote(pairs) +
+          (waits ? ` ${waits}` : ''),
+      )
+    })
   }
 
   /** Why a Next up player cannot be removed: nobody is waiting outside the groups (in their level range). */
@@ -206,10 +235,10 @@ export function BoardScreen({ session }: { session: SessionState }) {
 
   /** Take a player out of the session altogether, from a court or Next up (after the confirm dialog). */
   function handleRemoveFromSession(id: number) {
-    const wasLocked = hasLock(id)
+    const pairs = locksBrokenBy(session, { type: 'removePlayer', playerId: id, now: clock() })
     const message = removedMessage(session, id)
     removePlayer(id)
-    toast(message + (wasLocked ? ' Their partner lock was removed.' : ''))
+    toast(message + unlockedNote(pairs))
   }
 
   function handleEditScore(matchIndex: number, score: [number, number]) {
@@ -229,6 +258,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
           <CourtCard
             key={court.id}
             court={court}
+            lockMarks={marks}
             position={{ index, count: session.courts.length }}
             players={session.players}
             candidates={candidates}
@@ -252,6 +282,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         ))}
       </CourtGrid>
       <NextUpCard
+        lockMarks={marks}
         nextUp={group?.players ?? []}
         spots={nextUpSpots(session, 0)}
         players={session.players}
@@ -276,7 +307,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         session={session}
         nextUp={nextUpIds}
         onSkillChange={changeSkill}
-        onTakeBreak={checkOutPlayer}
+        onTakeBreak={handleQueueBreak}
         onRemoveFromSession={setRemoving}
         partnerFor={partnerFor}
         editable
@@ -288,6 +319,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         onEditPlayers={handleEditPlayers}
       />
       <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
+      {lockGuardDialog}
       <RemovePlayerDialog
         session={session}
         playerId={removing}

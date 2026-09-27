@@ -10,7 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
-import { lockCandidates, lockedMessage, lockExplanation } from '@/lib/partners'
+import { LockChoice } from '@/components/LockChoice'
+import { lockCandidates, lockedMessage } from '@/lib/partners'
 import { playerStatuses } from '@/lib/playerStatus'
 import { nextGroups } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
@@ -38,11 +39,11 @@ export function LockPartnerDialog({ session, playerId, onClose }: Props) {
     onClose()
   }
 
-  function lock(partnerId: number) {
+  function lock(partnerId: number, now = false) {
     if (playerId === null) return
-    const message = lockedMessage(session, playerId, partnerId)
+    const message = lockedMessage(session, playerId, partnerId, now)
     try {
-      lockPartners(playerId, partnerId)
+      lockPartners(playerId, partnerId, now)
       toast(message)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not lock them')
@@ -51,33 +52,28 @@ export function LockPartnerDialog({ session, playerId, onClose }: Props) {
   }
 
   function choose(partnerId: number) {
-    if (playerId !== null && lockExplanation(session, playerId, partnerId)) setChosen(partnerId)
-    else lock(partnerId)
+    // Always confirm: staff read the rule that applies, or choose while one of them is away.
+    if (playerId !== null) setChosen(partnerId)
   }
 
   const places = new Map(playerStatuses(session, nextGroups(session)).map((s) => [s.id, s.label]))
   const candidates = player ? lockCandidates(session, player.id) : []
-  const explanation = player && chosen !== null ? lockExplanation(session, player.id, chosen) : null
+  const choosing = player !== undefined && chosen !== null
 
   return (
     <Dialog open={player !== undefined} onOpenChange={(open) => !open && close()}>
       <DialogContent>
         {player &&
-          (explanation && chosen !== null ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>
-                  Lock {player.name} and {session.players[chosen]?.name}?
-                </DialogTitle>
-                <DialogDescription>{explanation}</DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setChosen(null)}>
-                  Back
-                </Button>
-                <Button onClick={() => lock(chosen)}>Lock anyway</Button>
-              </DialogFooter>
-            </>
+          (choosing && chosen !== null ? (
+            <LockChoice
+              session={session}
+              a={player.id}
+              b={chosen}
+              onWait={() => lock(chosen, false)}
+              onNow={() => lock(chosen, true)}
+              onCancel={() => setChosen(null)}
+              cancelLabel="Back"
+            />
           ) : (
             <>
               <DialogHeader>

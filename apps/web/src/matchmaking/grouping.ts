@@ -109,6 +109,16 @@ export function partnerOf(partners: Partners, id: number): number | undefined {
   return undefined
 }
 
+/**
+ * Whether a waiting player holds for their partner: their lock is in force but the partner is not waiting (on a court,
+ * a court being set up, or a break). They are not picked on their own; once the partner is back in the queue the pair
+ * stands at the later spot.
+ */
+export function isHeld(state: Pick<SessionState, 'partners' | 'queue'>, id: number): boolean {
+  const partner = partnerOf(state.partners, id)
+  return partner !== undefined && state.queue.includes(id) && !state.queue.includes(partner)
+}
+
 function buildUnits(queue: number[], partners: Partners): Unit[] {
   const seen = new Set<number>()
   const units: Unit[] = []
@@ -225,7 +235,11 @@ export function selectGroup(
   { ignoreMode = false }: SelectOptions = {},
 ): number[] | null {
   const matchmaking = ignoreMode ? 'balanced' : state.matchmaking
-  const units = buildUnits(queue, state.partners)
+  // A player holding for a partner who is not waiting is never picked without them.
+  const units = buildUnits(
+    queue.filter((id) => !isHeld(state, id)),
+    state.partners,
+  )
   const history = pairHistory(state)
   for (let a = 0; a < units.length; a++) {
     const anchor = units[a]

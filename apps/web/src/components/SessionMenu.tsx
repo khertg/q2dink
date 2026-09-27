@@ -6,6 +6,7 @@ import {
   LogOutIcon,
   MoreVerticalIcon,
   PencilIcon,
+  PlusIcon,
   QrCodeIcon,
   RadioIcon,
   SlidersHorizontalIcon,
@@ -24,7 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { sessionScale } from '@/lib/skill'
 import { useClubSkillScale } from '@/lib/skillScaleStore'
-import { isLive, sessionStatus } from '@/rotation/engine'
+import { isLive, MAX_COURTS, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -38,11 +39,20 @@ export function SessionMenu({ session }: { session: SessionState }) {
   const sessionId = useSessionStore((s) => s.sessionId)
   const setLive = useSessionStore((s) => s.setLive)
   const setSkillScale = useSessionStore((s) => s.setSkillScale)
+  const addCourt = useSessionStore((s) => s.addCourt)
+  const atCourtLimit = session.courts.length >= MAX_COURTS
   const clubScale = useClubSkillScale()
   // The club changed its skill levels after this session was created: staff choose when it follows.
   const newLevels = !sameScale(sessionScale(session), clubScale)
   const live = isLive(session)
   const notStarted = sessionStatus(session) === 'notStarted'
+
+  /** One more court at the end of the board, without opening Manage courts. */
+  function handleAddCourt() {
+    addCourt()
+    const added = useSessionStore.getState().session?.courts.at(-1)
+    toast(`${added?.name ?? 'Court'} added`)
+  }
 
   function toggleLive() {
     setLive(!live)
@@ -78,6 +88,24 @@ export function SessionMenu({ session }: { session: SessionState }) {
               onClick={() => setActive('rename')}
             >
               <PencilIcon aria-hidden="true" /> Rename session
+            </Button>
+          </PopoverClose>
+          <PopoverClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto min-h-9 w-full flex-col items-start gap-0 py-1.5"
+              onClick={handleAddCourt}
+              disabled={atCourtLimit}
+            >
+              <span className="flex items-center gap-2">
+                <PlusIcon aria-hidden="true" /> Add court
+              </span>
+              {atCourtLimit && (
+                <span className="pl-6 text-xs font-normal whitespace-normal text-muted-foreground">
+                  Maximum of {MAX_COURTS} courts
+                </span>
+              )}
             </Button>
           </PopoverClose>
           <PopoverClose asChild>

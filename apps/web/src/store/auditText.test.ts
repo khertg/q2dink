@@ -134,3 +134,28 @@ describe('describeAction for skill levels', () => {
     expect(say(waiting, { type: 'setPlayerSkill', playerId: 1, skill: 4 })).toBe("Changed Ann's level to Intermediate")
   })
 })
+
+describe('describeAction and partner locks', () => {
+  // Court 1: Ann & Bob (Blue) vs Cy & Dee; Eve and Fay wait.
+  const [a, b] = blue
+
+  it('says a lock was made now, or waits for a game', () => {
+    expect(say(playing, { type: 'lockPartners', a: 5, b: a, lockNow: true })).toBe(`Locked Eve & ${n(playing, [a])} as partners now: they wait for each other`)
+    expect(say(playing, { type: 'lockPartners', a: 5, b: a })).toBe(`Locked Eve & ${n(playing, [a])} as partners, starting once both have played`)
+    expect(say(waiting, { type: 'lockPartners', a: 5, b: 6 })).toBe('Locked Eve & Fay as partners')
+  })
+
+  it('names the locks an action ended, and why (the action itself)', () => {
+    const locked = apply(playing, { type: 'lockPartners', a, b })
+    expect(say(locked, { type: 'removeFromCourt', courtId: 1, playerId: a, onBreak: false, now: 2000 })).toBe(
+      `Court 1: took ${n(locked, [a])} off, spot left open. Unlocked ${n(locked, [a])} & ${n(locked, [b])}`,
+    )
+    expect(say(locked, { type: 'removePlayer', playerId: b, now: 2000 })).toMatch(/\. Unlocked .+ & .+$/)
+  })
+
+  it('adds nothing when no lock ended, a waiting lock came into force, or staff unlocked on purpose', () => {
+    const locked = apply(playing, { type: 'lockPartners', a, b })
+    expect(say(locked, { type: 'recordScore', courtId: 1, scoreA: 11, scoreB: 3, now: 2000 })).not.toMatch(/Unlocked/)
+    expect(say(locked, { type: 'unlockPartners', playerId: a })).toBe(`Unlocked ${n(locked, [a])} & ${n(locked, [b])}`)
+  })
+})

@@ -2,7 +2,7 @@ import { MAX_COURT_NAME_LENGTH, MAX_PLAYER_NAME_LENGTH, levelForRating, ratingFo
 import { levelCount, ratingOf, sessionScale } from '../lib/skill'
 import type { SkillLevel } from '../db/db'
 import { TEAM_NAMES } from '../lib/teams'
-import { partnerOf, selectGroup, splitGroup } from '../matchmaking/grouping'
+import { isHeld, partnerOf, selectGroup, splitGroup } from '../matchmaking/grouping'
 import { hasLevelCourts, inLevels, laneQueue, lanesOf, normalizeLevels, sameLevels, type LevelRange } from './levels'
 import type {
   Court,
@@ -525,7 +525,9 @@ function pickLaneOf(state: SessionState, lanes: (LevelRange | undefined)[]): num
 function pickedGroup(state: SessionState, levels?: LevelRange): NextGroup | null {
   const pick = validPick(state)
   if (!pick) return null
-  const fill = state.queue.filter((id) => !pick.includes(id) && inLevels(state.players[id]?.skill ?? 0, levels))
+  const fill = state.queue.filter(
+    (id) => !pick.includes(id) && !isHeld(state, id) && inLevels(state.players[id]?.skill ?? 0, levels),
+  )
   let next = 0
   const full = pick.map((id) => id ?? fill[next++])
   if (full.some((id) => id === undefined)) return null
@@ -652,7 +654,9 @@ export function nextUpStandIn(state: SessionState, outId: number): number | unde
   const lane = lanes.find((l) => l.group?.players.includes(outId))
   if (!lane) return undefined
   const grouped = new Set(lanes.flatMap((l) => l.group?.players ?? []))
-  return state.queue.find((id) => !grouped.has(id) && inLevels(state.players[id]?.skill ?? 0, lane.levels))
+  return state.queue.find(
+    (id) => !grouped.has(id) && !isHeld(state, id) && inLevels(state.players[id]?.skill ?? 0, lane.levels),
+  )
 }
 
 /**
@@ -1275,15 +1279,25 @@ function waitedSeconds(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
+export interface LockOptions {
+  /**
+   * Put the lock in force at once even though one of them is on a court or a break ("Lock now"): the one waiting
+   * holds (is not picked without their partner) until the partner is back in the queue, then they stand together at
+   * the later spot. Without it such a lock waits until both have finished a game ("Wait for 1 game").
+   */
+  now?: boolean
+}
+
 /**
  * Lock two checked-in players as partners: they always share a team and wait in the queue
  * together. Doubles only; a player can have one partner.
  *
- * When both are waiting the lock is in force at once and the later partner moves up right behind
- * the earlier one. Otherwise it waits (see lockStatus): nothing changes in the queue or the
- * groups until both have finished a game, so each keeps their own turn.
+ * When both are waiting (or in the same game) the lock is in force at once; two waiting players stand
+ * together at the later one's spot. Otherwise, by default, it waits (see lockStatus): nothing changes
+ * until both have finished a game, so each keeps their own turn. With `now` it is in force at once and
+ * the one waiting holds for the other (see LockOptions).
  */
-export function lockPartners(state: SessionState, a: number, b: number): SessionState {
+export function lockPartners(state: SessionState, a: number, b: number, { now = false }: LockOptions = {}): SessionState {
   if (state.mode !== 'doubles') throw new Error('Partners can only be locked in doubles')
   if (a === b) throw new Error('A player cannot partner themselves')
   if (!state.players[a] || !state.players[b]) throw new Error('Both players must be checked in')
@@ -1292,17 +1306,24 @@ export function lockPartners(state: SessionState, a: number, b: number): Session
   if (!active.includes(a) || !active.includes(b)) throw new Error('Both players must be in the session')
   if (isLocked(state, a) || isLocked(state, b)) throw new Error('A player is already locked with a partner')
 
-  if (!lockStatus(state, a, b).inForce) {
+  if (!now && !lockStatus(state, a, b).inForce) {
     return { ...state, pendingPartners: [...(state.pendingPartners ?? []), { pair: [a, b], done: [] }] }
   }
-  const locked = { ...state, partners: [...state.partners, [a, b] as [number, number]] }
+  // A staff-chosen group with only one of them in it cannot stand: they play together or not at all.
+  const inPick = [a, b].filter((id) => state.nextUpPick?.includes(id))
+  const unpicked = inPick.length === 1 ? withoutPickIncluding(state, inPick[0]) : state
+  const locked = { ...unpicked, partners: [...state.partners, [a, b] as [number, number]] }
   if (!(state.queue.includes(a) && state.queue.includes(b))) return locked
-  // Both waiting: the later one moves up to sit right behind the earlier one.
+  // Both waiting: the earlier one moves back to stand just before the later one, so the pair stands at the later
+  // spot and locking never lets anyone ahead of people who were waiting.
   const [first, second] = state.queue.indexOf(a) < state.queue.indexOf(b) ? [a, b] : [b, a]
-  const rest = state.queue.filter((id) => id !== second)
-  rest.splice(rest.indexOf(first) + 1, 0, second)
+  const rest = state.queue.filter((id) => id !== first)
+  rest.splice(rest.indexOf(second), 0, first)
   return { ...locked, queue: rest }
 }
+
+/** Who is holding for their partner right now (see isHeld), in queue order. */
+export const heldPlayers = (state: SessionState): number[] => state.queue.filter((id) => isHeld(state, id))
 
 /** Dissolve the partner lock, in force or waiting, that includes this player (no-op if none). */
 export function unlockPartners(state: SessionState, playerId: number): SessionState {

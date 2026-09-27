@@ -22,6 +22,16 @@ export async function waitingAction(page: Page, name: string, item: 'Take a brea
   await page.locator('[data-slot="popover-content"]').getByRole('button', { name: item }).click()
 }
 
+/**
+ * Every lock asks first: confirm the dialog with the rule (both waiting, or in the same game), or choose while one of
+ * them is away ('Wait for 1 game' or 'Lock now').
+ */
+export async function confirmLock(page: Page, choice: 'Lock partners' | 'Wait for 1 game' | 'Lock now' = 'Lock partners') {
+  const dialog = page.getByRole('dialog', { name: /^Lock .+ and .+\?$/ })
+  await dialog.getByRole('button', { name: choice }).click()
+  await expect(dialog).toHaveCount(0)
+}
+
 /** Open a shadcn Select by its label and pick an option by name. */
 export async function choose(page: Page, label: string | RegExp, option: string | RegExp) {
   await page.getByLabel(label).click()

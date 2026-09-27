@@ -8,12 +8,9 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog'
 import { AddPlayerForm } from '@/components/AddPlayerForm'
+import { LockChoice } from '@/components/LockChoice'
 import { LockPartnerDialog } from '@/components/LockPartnerDialog'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import { RosterCheckIn } from '@/components/RosterCheckIn'
@@ -32,10 +29,11 @@ import { requestRosterSync } from '@/cloud/sync'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { useSkillEditor } from '@/lib/useSkillEditor'
-import { lockedMessage, lockExplanation } from '@/lib/partners'
+import { locksBrokenBy } from '@/lib/lockGuard'
+import { breakNote, lockedMessage, lockMarks, unlockedSentence } from '@/lib/partners'
 import { removedMessage } from '@/lib/removal'
 import { usePartnerOption } from '@/lib/usePartnerOption'
-import { activeIds, lockStatus, playingIds } from '@/rotation/engine'
+import { activeIds, playingIds } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -57,22 +55,18 @@ function PartnersCard({ session }: { session: SessionState }) {
 
   const a = Number(first)
   const b = Number(second)
-  // A lock made while a partner is on a court or a break waits until both have finished a game.
-  const status = canLock ? lockStatus(session, a, b) : null
-  const name = (id: number) => session.players[id].name
-
-  function doLock() {
-    const message = lockedMessage(session, a, b)
-    lockPartners(a, b)
+  function doLock(now = false) {
+    const message = lockedMessage(session, a, b, now)
+    lockPartners(a, b, now)
     toast(message)
     setFirst('')
     setSecond('')
     setConfirming(false)
   }
 
+  // Staff always read the rule that applies (or choose, while one of them is away) before locking.
   function handleLock() {
-    if (status?.inForce === false) setConfirming(true)
-    else doLock()
+    setConfirming(true)
   }
 
   const pick = (id: string, label: string, value: string, onChange: (v: string) => void) => (
@@ -142,21 +136,17 @@ function PartnersCard({ session }: { session: SessionState }) {
             <Button className="h-11 w-full" disabled={!canLock} onClick={handleLock}>
               Lock partners
             </Button>
-            {status?.inForce === false && (
+            {canLock && (
               <Dialog open={confirming} onOpenChange={setConfirming}>
                 <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>
-                      Lock {name(a)} and {name(b)}?
-                    </DialogTitle>
-                    <DialogDescription>{lockExplanation(session, a, b)}</DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setConfirming(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={doLock}>Lock anyway</Button>
-                  </DialogFooter>
+                  <LockChoice
+                    session={session}
+                    a={a}
+                    b={b}
+                    onWait={() => doLock(false)}
+                    onNow={() => doLock(true)}
+                    onCancel={() => setConfirming(false)}
+                  />
                 </DialogContent>
               </Dialog>
             )}
@@ -174,6 +164,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
   const [removing, setRemoving] = useState<number | null>(null)
   const [locking, setLocking] = useState<number | null>(null)
   const partnerFor = usePartnerOption(session, setLocking)
+  const marks = lockMarks(session)
   const changeSkill = useSkillEditor()
   const clubSlug = useClubAuth((s) => s.club?.slug)
   const roster = useLiveQuery(() => listRoster(clubSlug), [clubSlug])
@@ -194,8 +185,9 @@ export function CheckInScreen({ session }: { session: SessionState }) {
 
   function handleRemove(id: number) {
     const message = removedMessage(session, id)
+    const unlocked = unlockedSentence(session, locksBrokenBy(session, { type: 'removePlayer', playerId: id, now: 0 }))
     removePlayer(id)
-    toast(message)
+    toast(unlocked ? `${message} ${unlocked}` : message)
   }
 
   const removeButton = (id: number) => (
@@ -238,13 +230,17 @@ export function CheckInScreen({ session }: { session: SessionState }) {
               {session.queue.map((id) => (
                 <li key={id} className="flex items-center gap-3 py-2">
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <PlayerAvatar name={session.players[id].name} editable viewable />
+                    <PlayerAvatar name={session.players[id].name} editable viewable lock={marks.get(id)} />
                     <span className="min-w-0 truncate">{session.players[id].name}</span>
                   </span>
                   <SkillBadge player={session.players[id]} display="name" onChange={(skill) => changeSkill(id, skill)} />
                   <WaitingPlayerMenu
                     name={session.players[id].name}
-                    onTakeBreak={() => checkOutPlayer(id)}
+                    onTakeBreak={() => {
+                      checkOutPlayer(id)
+                      const note = breakNote(useSessionStore.getState().session ?? session, id)
+                      if (note) toast(note)
+                    }}
                     onRemoveFromSession={() => setRemoving(id)}
                     partner={partnerFor?.(id)}
                   />
@@ -270,7 +266,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
               {session.onBreak.map((id) => (
                 <li key={id} className="flex items-center gap-3 py-2">
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <PlayerAvatar name={session.players[id].name} editable />
+                    <PlayerAvatar name={session.players[id].name} editable lock={marks.get(id)} />
                     <span className="min-w-0 truncate">{session.players[id].name}</span>
                   </span>
                   <SkillBadge player={session.players[id]} display="name" onChange={(skill) => changeSkill(id, skill)} />

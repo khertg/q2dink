@@ -5,6 +5,7 @@ import type { PartnerOption } from '@/components/partnerItem'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
+import type { LockMark } from '@/lib/partners'
 import { OpenTile, PlayerTile, TeamBox, Versus } from '@/components/PlayerTile'
 import { SkillBadge } from '@/components/SkillBadge'
 import { WaitingTime } from '@/components/WaitingTime'
@@ -22,6 +23,8 @@ interface Props {
    */
   spots?: (number | null)[]
   players: Record<number, RosterPlayer>
+  /** Locked partners' marks, by player (see lockMarks), for their avatars. */
+  lockMarks?: Map<number, LockMark>
   /** Shown when nobody can be listed, so people know what is being waited for. */
   emptyMessage: string
   /**
@@ -69,6 +72,7 @@ export interface NextUpLane {
 type TeamsProps = Pick<
   Props,
   | 'players'
+  | 'lockMarks'
   | 'candidates'
   | 'onReplace'
   | 'onRemove'
@@ -170,6 +174,7 @@ export function NextUpCard({
 function GroupTeams({
   spots,
   players,
+  lockMarks,
   candidates = [],
   lane,
   onOpenSpot,
@@ -202,7 +207,13 @@ function GroupTeams({
               ) : (
                 <PlayerTile key={id}>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <PlayerAvatar name={players[id]?.name ?? 'Player'} size="sm" editable={editable} viewable />
+                    <PlayerAvatar
+                      name={players[id]?.name ?? 'Player'}
+                      size="sm"
+                      editable={editable}
+                      viewable
+                      lock={lockMarks?.get(id)}
+                    />
                     <span className="min-w-0 truncate">{players[id]?.name ?? 'Player'}</span>
                   </span>
                   {/* Its own column, so the times line up like the level badges. */}

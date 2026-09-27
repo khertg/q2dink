@@ -8,6 +8,7 @@ import { CourtMenu } from '@/components/CourtMenu'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { ScoreDialog } from '@/components/ScoreDialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
+import type { LockMark } from '@/lib/partners'
 import { PlayerMenu } from '@/components/PlayerMenu'
 import type { PartnerOption } from '@/components/partnerItem'
 import { EmptyTeams, OpenTile, PlayerTile, TeamBox, Versus } from '@/components/PlayerTile'
@@ -24,6 +25,8 @@ import type { Court, RosterPlayer } from '@/rotation/types'
 interface Props {
   court: Court
   players: Record<number, RosterPlayer>
+  /** Locked partners' marks, by player (see lockMarks), for their avatars. */
+  lockMarks?: Map<number, LockMark>
   /** Locked partner pairs, to mark teams that are locked together. */
   partners: [number, number][]
   /** Read-only cards (the public viewer page) show teams but no controls. */
@@ -99,6 +102,7 @@ function PlayingBadge({ court }: { court: Court }) {
 export function CourtCard({
   court,
   players,
+  lockMarks,
   partners,
   readOnly = false,
   candidates = [],
@@ -199,7 +203,9 @@ export function CourtCard({
                     ) : (
                       <PlayerTile key={id}>
                         <span className="flex min-w-0 flex-1 items-center gap-2">
-                          {players[id] && <PlayerAvatar name={players[id].name} size="sm" editable={!readOnly} viewable />}
+                          {players[id] && (
+                            <PlayerAvatar name={players[id].name} size="sm" editable={!readOnly} viewable lock={lockMarks?.get(id)} />
+                          )}
                           <span className="min-w-0 truncate">{players[id]?.name}</span>
                         </span>
                         {/* Its own column, so the times line up like the level badges. */}

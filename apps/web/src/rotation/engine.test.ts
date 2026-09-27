@@ -14,6 +14,7 @@ import {
   editMatch,
   fillCourtSpot,
   fillNextUpSpot,
+  heldPlayers,
   isShort,
   estimateWaitMinutes,
   lockPartners,
@@ -23,6 +24,7 @@ import {
   MAX_SCORE,
   moveCourt,
   nextGroup,
+  nextGroups,
   nextUpSpots,
   nextUpStandIn,
   recordResult,
@@ -47,6 +49,7 @@ import {
   startGame,
   unlockPartners,
 } from './engine'
+import { waitingMessage } from '../lib/nextUp'
 import { rankPlayers } from './standings'
 import { fillCourts } from './testing'
 import type { RosterPlayer, SessionState } from './types'
@@ -1704,12 +1707,13 @@ describe('partner locks that do not take effect at once', () => {
     expect(nextGroup(s)!.players.slice().sort()).toEqual([3, 4, 5, 6])
   })
 
-  it('is in force at once when both are waiting, with the later partner moved up behind the earlier one', () => {
+  it('is in force at once when both are waiting, standing together at the later partner’s spot', () => {
     const s = lockPartners(withPlayers(createSession('doubles', 1), 6), 2, 5)
     expect(s.partners).toEqual([[2, 5]])
     expect(s.pendingPartners).toBeUndefined()
-    expect(s.queue).toEqual([1, 2, 5, 3, 4, 6])
-    expect(nextGroup(s)!.players.slice().sort()).toEqual([1, 2, 3, 5])
+    // 2 moves back to just before 5: nobody who waited is overtaken.
+    expect(s.queue).toEqual([1, 3, 4, 2, 5, 6])
+    expect(nextGroup(s)!.players.slice().sort()).toEqual([1, 3, 4, 6])
   })
 
   it('is in force at once when both are in the same game', () => {
@@ -1992,5 +1996,170 @@ describe('skill scales in a session', () => {
     expect(s.courts[0].levels).toEqual([2, 2])
     s = setSkillScale(s, { levels: [{ label: 'A', from: 1 }, { label: 'B', from: 4 }] })
     expect(s.courts[0]).not.toHaveProperty('levels')
+  })
+})
+
+describe('lock scenarios: Lock now, holding, and the pair’s spot', () => {
+  /** Court 1 in play; returns the session, the four playing and the ones waiting (in queue order). */
+  function playing(count: number, courts = 1) {
+    const s = fillCourts(withPlayers(createSession('doubles', courts), count))
+    return { s, onCourt: s.courts[0].teams!.flat(), waiting: s.queue }
+  }
+  const together = (s: SessionState, a: number, b: number) => {
+    const g = nextGroup(s)?.players ?? []
+    return g.includes(a) === g.includes(b)
+  }
+
+  it('row 4, Lock now: the waiting partner holds until the other’s game ends, then they queue together at the back', () => {
+    const { s, onCourt, waiting } = playing(8)
+    const [ann] = waiting
+    const [bob] = onCourt
+    const locked = lockPartners(s, ann, bob, { now: true })
+    expect(locked.partners).toEqual([[ann, bob]])
+    expect(locked.pendingPartners).toBeUndefined()
+    expect(heldPlayers(locked)).toEqual([ann])
+    // Three others wait, but Ann holds: no group, and staff are told one more player is needed.
+    expect(nextGroup(locked)).toBeNull()
+    expect(waitingMessage(locked)).toBe('Waiting for 1 more player.')
+
+    const after = recordScore(locked, 1, 11, 5, { now: 1000 }).state
+    expect(heldPlayers(after)).toEqual([])
+    expect(after.queue.indexOf(bob)).toBeGreaterThan(after.queue.indexOf(ann))
+    expect(together(after, ann, bob)).toBe(true)
+  })
+
+  it('row 4, Wait for 1 game: the waiting partner still plays on their own meanwhile', () => {
+    const { s, onCourt, waiting } = playing(8)
+    const locked = lockPartners(s, waiting[0], onCourt[0])
+    expect(locked.pendingPartners).toHaveLength(1)
+    expect(heldPlayers(locked)).toEqual([])
+    expect(nextGroup(locked)!.players.slice().sort()).toEqual(waiting.slice().sort())
+  })
+
+  it('row 3: locking a hand-picked Next up player with someone outside the pick drops the pick', () => {
+    let s = withPlayers(createSession('doubles', 1), 6)
+    s = fillNextUpSpot(s, 0, 0, 1)
+    expect(isNextUpPicked(s)).toBe(true)
+    s = lockPartners(s, 1, 6)
+    expect(s.nextUpPick).toBeUndefined()
+    expect(s.queue).toEqual([2, 3, 4, 5, 1, 6])
+  })
+
+  it('row 8: two partners on different courts, Lock now: the first to finish holds for the second', () => {
+    const s = fillCourts(withPlayers(createSession('doubles', 2), 8))
+    const [ann] = s.courts[0].teams!.flat()
+    const [bob] = s.courts[1].teams!.flat()
+    let t = lockPartners(s, ann, bob, { now: true })
+    t = recordScore(t, 1, 11, 3, { now: 1000 }).state
+    expect(heldPlayers(t)).toEqual([ann])
+    t = recordScore(t, 2, 11, 3, { now: 2000 }).state
+    expect(heldPlayers(t)).toEqual([])
+    expect(together(t, ann, bob)).toBe(true)
+  })
+
+  it('rows 9 and 28: Lock now with a partner on a break holds until they come back, at the back', () => {
+    let s = checkOut(withPlayers(createSession('doubles', 1), 6), 6)
+    s = lockPartners(s, 1, 6, { now: true })
+    expect(heldPlayers(s)).toEqual([1])
+    expect(nextGroup(s)!.players.slice().sort()).toEqual([2, 3, 4, 5])
+    s = checkIn(s, player(6))
+    expect(heldPlayers(s)).toEqual([])
+    expect(s.queue.at(-1)).toBe(6)
+  })
+
+  it('row 27: an active pair where one takes a break: the other holds', () => {
+    let s = lockPartners(withPlayers(createSession('doubles', 1), 6), 1, 2)
+    s = checkOut(s, 2)
+    expect(s.partners).toEqual([[1, 2]])
+    expect(heldPlayers(s)).toEqual([1])
+    expect(nextGroup(s)!.players).not.toContain(1)
+  })
+
+  it('row 17: the partner’s game is cancelled (players back to the front): the pair stands at the later spot', () => {
+    const { s, onCourt, waiting } = playing(8)
+    const [ann] = waiting
+    const [bob] = onCourt
+    const t = cancelMatch(lockPartners(s, ann, bob, { now: true }), 1, 1000)
+    expect(heldPlayers(t)).toEqual([])
+    expect(t.queue.indexOf(ann)).toBeGreaterThan(t.queue.indexOf(bob))
+    expect(together(t, ann, bob)).toBe(true)
+  })
+
+  it('row 31: a waiting lock comes into force after both have played; from then the pair holds for each other', () => {
+    const s = fillCourts(withPlayers(createSession('doubles', 2), 8))
+    const [ann] = s.courts[0].teams!.flat()
+    const [bob] = s.courts[1].teams!.flat()
+    let t = lockPartners(s, ann, bob)
+    t = recordScore(t, 1, 11, 3, { now: 1000 }).state
+    expect(t.partners).toEqual([])
+    t = recordScore(t, 2, 11, 3, { now: 2000 }).state
+    expect(t.partners).toEqual([[ann, bob]])
+    t = checkOut(t, bob)
+    expect(heldPlayers(t)).toEqual([ann])
+  })
+
+  it('row 5: a partner on a court being set up: Lock now holds; clearing the court brings the pair together', () => {
+    let s = withPlayers(createSession('doubles', 1), 6)
+    s = fillCourtSpot(s, 1, 0, 6, 0, 0) // Fay put on the court by hand, game not started
+    s = lockPartners(s, 1, 6, { now: true })
+    expect(heldPlayers(s)).toEqual([1])
+    s = cancelMatch(s, 1, 1000) // "Clear court": Fay back to the queue
+    expect(heldPlayers(s)).toEqual([])
+    const g = nextGroup(s)?.players ?? []
+    expect(g.includes(1)).toBe(g.includes(6))
+  })
+
+  it('row 6: a partner in a paused game (a spot left open): Lock now holds just the same', () => {
+    const { s, onCourt, waiting } = playing(8)
+    const paused = removeFromCourt(s, 1, onCourt[3], { now: 500 })
+    const t = lockPartners(paused, waiting[0], onCourt[0], { now: true })
+    expect(heldPlayers(t)).toEqual([waiting[0]])
+  })
+
+  it('rows 10 and 11: both away, Lock now: whoever is back in the queue first holds for the other', () => {
+    let s = checkOut(checkOut(withPlayers(createSession('doubles', 1), 6), 5), 6)
+    s = lockPartners(s, 5, 6, { now: true })
+    expect(s.partners).toEqual([[5, 6]])
+    s = checkIn(s, player(5))
+    expect(heldPlayers(s)).toEqual([5])
+    s = checkIn(s, player(6))
+    expect(heldPlayers(s)).toEqual([])
+    const { s: court, onCourt, waiting } = playing(8)
+    const t = lockPartners(checkOut(court, waiting[0]), waiting[0], onCourt[0], { now: true })
+    expect(heldPlayers(t)).toEqual([])
+    expect(heldPlayers(recordScore(t, 1, 11, 2, { now: 1000 }).state)).toEqual([onCourt[0]])
+  })
+
+  it('row 18: the partner’s court is closed with the game: the pair stands at the later spot', () => {
+    const { s, onCourt, waiting } = playing(10, 2)
+    const t = closeCourt(lockPartners(s, waiting[0], onCourt[0], { now: true }), 1, 1000)
+    expect(heldPlayers(t)).toEqual([])
+    const g = nextGroup(t)?.players ?? []
+    expect(g.includes(waiting[0])).toBe(g.includes(onCourt[0]))
+  })
+
+  it('row 30: staff can still hand-pick a held player into Next up; the lock stays', () => {
+    const { s, onCourt, waiting } = playing(8)
+    const held = waiting[0]
+    let t = lockPartners(s, held, onCourt[0], { now: true })
+    t = fillNextUpSpot(t, 0, 0, held)
+    expect(nextGroup(t)?.players ?? []).toContain(held)
+    expect(t.partners).toEqual([[held, onCourt[0]]])
+  })
+
+  it('never offers a held player as a Next up stand-in, nor to fill a pinned group', () => {
+    const { s, onCourt, waiting } = playing(10)
+    const held = waiting[4]
+    const t = lockPartners(s, held, onCourt[0], { now: true })
+    expect(nextUpStandIn(t, waiting[0])).toBe(waiting[5])
+    const pinned = fillNextUpSpot(resetNextUp(t), 0, 0, waiting[0])
+    expect(nextGroup(pinned)?.players ?? []).not.toContain(held)
+  })
+
+  it('row 33: courts kept for levels: a held player is in no lane', () => {
+    let s = checkOut(withPlayers(createSession('doubles', 2), 6), 6)
+    s = setCourtLevels(s, 1, [3, 6])
+    s = lockPartners(s, 1, 6, { now: true })
+    for (const lane of nextGroups(s)) expect(lane.group?.players ?? []).not.toContain(1)
   })
 })

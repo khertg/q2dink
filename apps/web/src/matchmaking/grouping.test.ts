@@ -73,12 +73,14 @@ describe('selectGroup: auto-balanced', () => {
     expect(sorted(group(s))).toEqual([2, 3, 4, 5])
   })
 
-  it('treats a pair as two solos while only one partner is waiting', () => {
-    let s = queued('balanced', [[3], [3], [3], [3], [3]])
-    s = lockPartners(s, 1, 5)
-    // Partner 5 is on a break, so player 1 is just a solo again.
-    s = { ...s, queue: [1, 2, 3, 4], onBreak: [5] }
-    expect(group(s)).toEqual([1, 2, 3, 4])
+  it('never picks a player whose partner is not waiting: they hold for them', () => {
+    let s = queued('balanced', [[3], [3], [3], [3], [3], [3]])
+    s = lockPartners(s, 1, 6)
+    // Partner 6 is on a break, so player 1 waits for them rather than playing alone.
+    s = { ...s, queue: [1, 2, 3, 4, 5], onBreak: [6] }
+    expect(group(s)).toEqual([2, 3, 4, 5])
+    s = { ...s, queue: [1, 2, 3, 4], onBreak: [5, 6] }
+    expect(group(s)).toBeNull()
   })
 })
 

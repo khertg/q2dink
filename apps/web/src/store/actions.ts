@@ -77,7 +77,8 @@ export type SessionAction =
   | { type: 'fillCourtSpot'; courtId: number; team: 0 | 1; slot?: number; playerId: number; now: number }
   | { type: 'fillNextUpSpot'; lane: number; slot: number; playerId: number; now: number }
   | { type: 'resetNextUp' }
-  | { type: 'lockPartners'; a: number; b: number }
+  /** `lockNow`: in force at once even with one of them away (they hold for each other); missing: waits for a game. */
+  | { type: 'lockPartners'; a: number; b: number; lockNow?: boolean }
   | { type: 'unlockPartners'; playerId: number }
   /** Start a session that was set up without starting: its clock runs from `now`. */
   | { type: 'startClock'; now: number; by?: DeviceRef }
@@ -197,7 +198,7 @@ function applyChange(session: SessionState, action: SessionAction): Applied {
     case 'resetNextUp':
       return { session: resetNextUp(session) }
     case 'lockPartners':
-      return { session: lockPartners(session, action.a, action.b) }
+      return { session: lockPartners(session, action.a, action.b, { now: action.lockNow === true }) }
     case 'unlockPartners':
       return { session: unlockPartners(session, action.playerId) }
     case 'restore':

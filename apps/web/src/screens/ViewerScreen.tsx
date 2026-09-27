@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useClubName } from '@/lib/avatars'
 import { levelLabel, sessionScale } from '@/lib/skill'
+import { lockMarks } from '@/lib/partners'
 import { SkillScaleContext } from '@/lib/skillScaleContext'
 import { playingIds } from '@/rotation/engine'
 import { matchmakingLabel } from '@/lib/matchmaking'
@@ -188,6 +189,7 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
 
   const { snapshot, updatedAt } = view
   const session = toViewerState(snapshot)
+  const marks = lockMarks(session)
   const updated = new Date(updatedAt).toLocaleTimeString()
 
   return (
@@ -243,6 +245,7 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
               <CourtCard
                 key={court.id}
                 court={court}
+                lockMarks={marks}
                 players={session.players}
                 partners={session.partners}
                 slotsPerTeam={snapshot.mode === 'doubles' ? 2 : 1}
@@ -251,6 +254,7 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
             ))}
           </CourtGrid>
           <NextUpCard
+            lockMarks={marks}
             nextUp={snapshot.nextUp}
             players={session.players}
             emptyMessage="No group is ready yet. Waiting for more players."

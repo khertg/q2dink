@@ -65,7 +65,26 @@ test.describe('adding a court', () => {
     await expect(dialog.getByRole('button', { name: 'Add court' })).toBeEnabled()
   })
 
-  test('adding is only offered inside Manage courts, not on the Board', async ({ page }) => {
+  test('the session menu adds a court in one tap, just above Manage courts, until there are 15', async ({ page }) => {
+    await startSession(page)
+    await openSessionMenu(page)
+    const menu = page.locator('[data-slot="popover-content"]')
+    const items = await menu.getByRole('button').allInnerTexts()
+    expect(items.indexOf('Add court') + 1).toBe(items.indexOf('Manage courts'))
+    await menu.getByRole('button', { name: 'Add court' }).click()
+    await expect(page.getByText('Court 2 added')).toBeVisible()
+    expect(await courtOrder(page)).toEqual(['Court 1', 'Court 2'])
+  })
+
+  test('the session menu’s Add court is unavailable at 15 courts, and says why', async ({ page }) => {
+    await startSession(page, { courts: 15 })
+    await openSessionMenu(page)
+    const add = page.locator('[data-slot="popover-content"]').getByRole('button', { name: /^Add court/ })
+    await expect(add).toBeDisabled()
+    await expect(add).toContainText('Maximum of 15 courts')
+  })
+
+  test('the Board itself has no Add court button; Manage courts has one too', async ({ page }) => {
     await startSession(page)
     await expect(page.getByRole('button', { name: 'Add court' })).toHaveCount(0)
     const dialog = await manage(page)
