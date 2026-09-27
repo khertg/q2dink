@@ -33,8 +33,8 @@ import { useDevice } from '@/lib/device'
 import { otherDevicesOpen, statusChangeMessage } from '@/lib/pause'
 import { isLive, lastActivityAt, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
-import { useSessionStore } from '@/store/session'
-import { confirmSlice, notAppliedAudits, parkedFor, parkedUnsent, rebaseSlice, sliceOf, type SessionSlice } from '@/store/slices'
+import { openBelongsTo, useSessionStore } from '@/store/session'
+import { belongsTo, confirmSlice, notAppliedAudits, parkedFor, parkedUnsent, rebaseSlice, sliceOf, type SessionSlice } from '@/store/slices'
 import { CloudError, type CloudApi, type PutAvatarRequest } from './api'
 import { dropAuditOfOtherClubs, onAuditQueued, queueAudit, recordAudit, removeSentAudit, unsentAudit } from './audit'
 import { useClubAuth } from './auth'
@@ -545,7 +545,7 @@ async function endedElsewhere(api: CloudApi | null, slice: SessionSlice): Promis
       startedAt: slice.startedAt,
       session: slice.session,
       lifetimeCounted: slice.lifetimeCounted,
-      clubSlug: club?.slug,
+      clubSlug: slice.clubSlug ?? club?.slug,
       now: await endedAtFor(api, club?.token, slice.sessionId, slice.session),
     })
     // The device that ended it sends the club its copy; this one only keeps its own.
@@ -663,10 +663,15 @@ export function startCloudSync(api: CloudApi | null = cloud): () => void {
    * Tell the club the sessions that ended here have ended, if it has not been told yet (only those, so the
    * club's other sessions are never ended).
    */
-  const sendEnd = async (token: string) => {
+  const sendEnd = async (club: { token: string; slug: string }) => {
     for (const ended of [...useSessionStore.getState().endedSessionIds]) {
-      await api.clear(token, ended)
-      useSessionStore.setState((s) => ({ endedSessionIds: s.endedSessionIds.filter((id) => id !== ended) }))
+      // Another club's session: its end waits for that club to log in again.
+      if (!belongsTo(useSessionStore.getState().endedClubs?.[ended], club.slug)) continue
+      await api.clear(club.token, ended)
+      useSessionStore.setState((s) => {
+        const { [ended]: _sent, ...endedClubs } = s.endedClubs ?? {}
+        return { endedSessionIds: s.endedSessionIds.filter((id) => id !== ended), endedClubs }
+      })
     }
   }
 
@@ -729,8 +734,9 @@ export function startCloudSync(api: CloudApi | null = cloud): () => void {
         const { session, sessionId } = useSessionStore.getState()
         try {
           // Sessions that ended here: end them on the club first (only those).
-          await sendEnd(club.token)
-          if (session) await sendSession(club, sessionId)
+          await sendEnd(club)
+          // Only ever this club's own session (another club's is parked when this one logs in).
+          if (session && openBelongsTo(club.slug)) await sendSession(club, sessionId)
           await sendParked(club)
         } catch (error) {
           handleAuthError(error)
@@ -742,7 +748,7 @@ export function startCloudSync(api: CloudApi | null = cloud): () => void {
       if (!club) return
       try {
         await serially(async () => {
-          await sendEnd(club.token)
+          await sendEnd(club)
           await sendParked(club)
         })
       } catch (error) {
@@ -780,7 +786,7 @@ export function startCloudSync(api: CloudApi | null = cloud): () => void {
   const tellPresence = async () => {
     const club = signedIn()
     const { session, sessionId } = useSessionStore.getState()
-    const open = session ? sessionId : ''
+    const open = session && openBelongsTo(club?.slug) ? sessionId : ''
     const myId = useDevice.getState().id
     if (presentIn && presentIn !== open) {
       const left = presentIn
@@ -852,7 +858,8 @@ export function startCloudSync(api: CloudApi | null = cloud): () => void {
       const club = signedIn()
       if (!club || !navigator.onLine) return
       const { session, sessionId, base } = useSessionStore.getState()
-      if (!session || !base) return
+      // Another club's session is not this club's to follow: it would look ended here.
+      if (!session || !base || !openBelongsTo(club.slug)) return
       try {
         const row = await api.fetchSessionState(club.token, sessionId)
         const now = useSessionStore.getState()

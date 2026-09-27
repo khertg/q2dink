@@ -183,7 +183,17 @@ beforeEach(() => {
   const fire = (type: string) => listeners.get(type)?.forEach((fn) => fn())
   ;(globalThis as { fire?: (t: string) => void }).fire = fire
 
-  useSessionStore.setState({ location: '', session: null, previous: null, base: null, pending: [], parked: {}, endedSessionIds: [] })
+  useSessionStore.setState({
+    location: '',
+    session: null,
+    previous: null,
+    base: null,
+    pending: [],
+    parked: {},
+    endedSessionIds: [],
+    endedClubs: {},
+    clubSlug: undefined,
+  })
   useClubAuth.setState({ club: null, pendingLifetime: [] })
   useSyncStore.setState({ status: 'off', clubSessions: [] })
 })
@@ -795,5 +805,74 @@ describe('a device used for two clubs', () => {
     expect(session().parked[id]).toBeDefined()
     expect(session().parked[id].pending.length).toBeGreaterThan(0)
     stopOther()
+  })
+  const uptown = { slug: 'uptown', name: 'Uptown', token: 'tok-2' }
+
+  it('puts one club’s open session away when another club logs in, and never sends, follows or ends it there', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    session().startSession('Downtown night', 'doubles', 1)
+    session().startClock()
+    await vi.advanceTimersByTimeAsync(500)
+    const id = session().sessionId
+    expect(session().clubSlug).toBe('downtown')
+    online.value = false
+    session().checkInPlayer(player(1))
+    stop()
+
+    // Logged out (the session stays open behind the login screen), then Uptown logs in.
+    useClubAuth.setState({ club: null })
+    expect(session().session).not.toBeNull()
+    const other = fakeApi()
+    online.value = true
+    const stopOther = startCloudSync(other.cloudApi)
+    useClubAuth.setState({ club: uptown })
+    expect(session().session).toBeNull()
+    expect(session().parked[id]).toMatchObject({ clubSlug: 'downtown' })
+    expect(session().parked[id].session.clockStoppedAt).toBeUndefined() // left running, not paused
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(other.api.publish).not.toHaveBeenCalled()
+    expect(other.api.fetchSessionState).not.toHaveBeenCalledWith('tok-2', id)
+    expect(archiveSession).not.toHaveBeenCalledWith(expect.objectContaining({ sessionId: id }))
+    stopOther()
+
+    // Downtown logs in again: the session is still there, and its unsent change reaches Downtown.
+    const sent = fake.api.publish.mock.calls.length
+    useClubAuth.setState({ club })
+    const stopBack = startCloudSync(fake.cloudApi)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(session().parked[id].pending).toEqual([])
+    expect(fake.api.publish.mock.calls.length).toBeGreaterThan(sent)
+    stopBack()
+  })
+
+  it('sends a session’s end only to its own club', async () => {
+    useClubAuth.setState({ club })
+    session().startSession('Downtown night', 'doubles', 1)
+    const id = session().sessionId
+    session().endSession()
+    expect(session().endedClubs).toEqual({ [id]: 'downtown' })
+
+    const other = fakeApi()
+    useClubAuth.setState({ club: uptown })
+    const stopOther = startCloudSync(other.cloudApi)
+    session().startSession('Uptown night', 'doubles', 1)
+    await vi.advanceTimersByTimeAsync(500)
+    const own = session().sessionId
+    session().endSession()
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(other.api.clear).toHaveBeenCalledWith('tok-2', own)
+    expect(other.api.clear).not.toHaveBeenCalledWith('tok-2', id)
+    expect(session().endedSessionIds).toEqual([id])
+    stopOther()
+
+    const back = fakeApi()
+    useClubAuth.setState({ club })
+    const stopBack = startCloudSync(back.cloudApi)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(back.api.clear).toHaveBeenCalledWith('tok-1', id)
+    expect(session().endedSessionIds).toEqual([])
+    stopBack()
   })
 })

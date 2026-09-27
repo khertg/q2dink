@@ -64,11 +64,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  */
 async function loadEntries(): Promise<{ active: PastEntry[]; deleted: DeletedEntry[]; clubError: string | null }> {
   await purgeExpiredHistory()
-  const [local, localDeleted] = await Promise.all([listHistory(), listDeletedHistory()])
+  const login = useClubAuth.getState().club
+  // Another club's past sessions on this device are never listed.
+  const [local, localDeleted] = await Promise.all([listHistory(login?.slug), listDeletedHistory(login?.slug)])
   let clubError: string | null = null
   let club: Awaited<ReturnType<NonNullable<typeof cloud>['listHistory']>> = []
   let clubDeleted: Awaited<ReturnType<NonNullable<typeof cloud>['listDeletedHistory']>> = []
-  const login = useClubAuth.getState().club
   if (cloud && login) {
     try {
       ;[club, clubDeleted] = await Promise.all([cloud.listHistory(login.token), cloud.listDeletedHistory(login.token)])

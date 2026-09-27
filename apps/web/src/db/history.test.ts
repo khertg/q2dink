@@ -103,6 +103,19 @@ describe('listHistory', () => {
       expect(row).not.toHaveProperty('lifetimeCounted')
     }
   })
+
+  it('lists only the signed-in club’s sessions, and older ones no club has claimed, never another club’s', async () => {
+    await archiveSession({ id: 'mine', location: 'L', startedAt: 1, session: session(), lifetimeCounted: {}, clubSlug: 'downtown', now: 3_000 })
+    await archiveSession({ id: 'theirs', location: 'L', startedAt: 1, session: session(), lifetimeCounted: {}, clubSlug: 'uptown', now: 2_000 })
+    await archive('unclaimed', session(), 1_000)
+    expect((await listHistory('downtown')).map((r) => r.id)).toEqual(['mine', 'unclaimed'])
+    expect((await listHistory('uptown')).map((r) => r.id)).toEqual(['theirs', 'unclaimed'])
+    expect((await listHistory()).map((r) => r.id)).toEqual(['mine', 'theirs', 'unclaimed'])
+
+    await softDeleteHistory('theirs')
+    expect(await listDeletedHistory('downtown')).toEqual([])
+    expect((await listDeletedHistory('uptown')).map((r) => r.id)).toEqual(['theirs'])
+  })
 })
 
 describe('sync bookkeeping', () => {

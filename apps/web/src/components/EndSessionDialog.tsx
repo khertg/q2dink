@@ -76,7 +76,8 @@ export function EndSessionDialog({ session, open, onOpenChange }: EndSessionDial
         startedAt,
         session,
         lifetimeCounted,
-        clubSlug: useClubAuth.getState().club?.slug,
+        // The club it belongs to (the one signed in, since another club's session is never open).
+        clubSlug: useSessionStore.getState().clubSlug ?? useClubAuth.getState().club?.slug,
       })
     } catch {
       toast.error('Could not keep a copy of the session, so it is still open. Try again.')

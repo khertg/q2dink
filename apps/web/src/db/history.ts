@@ -92,15 +92,25 @@ export async function archiveSession(input: {
 
 const summaryOf = ({ session: _s, storeVersion: _v, lifetimeCounted: _c, ...summary }: HistoryRecord): HistorySummary => summary
 
-/** Past sessions that are not deleted, newest first. Without the session itself, so a long list stays light. */
-export async function listHistory(): Promise<HistorySummary[]> {
+/**
+ * Whether a past session is shown to this club: its own, and older ones no club has claimed yet. Another club's
+ * never are. Without a club (a build with no cloud), all of them.
+ */
+const shownTo = (record: HistoryRecord, clubSlug: string | undefined) =>
+  clubSlug === undefined || record.clubSlug === undefined || record.clubSlug === clubSlug
+
+/**
+ * Past sessions that are not deleted, newest first, for the club signed in (see shownTo). Without the session
+ * itself, so a long list stays light.
+ */
+export async function listHistory(clubSlug?: string): Promise<HistorySummary[]> {
   const records = await db.history.orderBy('endedAt').reverse().toArray()
-  return records.filter((r) => r.deletedAt === undefined).map(summaryOf)
+  return records.filter((r) => r.deletedAt === undefined && shownTo(r, clubSlug)).map(summaryOf)
 }
 
-/** Recently deleted on this device, most recently deleted first. */
-export async function listDeletedHistory(): Promise<HistorySummary[]> {
-  const records = await db.history.filter((r) => r.deletedAt !== undefined).toArray()
+/** Recently deleted on this device, most recently deleted first, for the club signed in (see shownTo). */
+export async function listDeletedHistory(clubSlug?: string): Promise<HistorySummary[]> {
+  const records = await db.history.filter((r) => r.deletedAt !== undefined && shownTo(r, clubSlug)).toArray()
   return records.sort((a, b) => b.deletedAt! - a.deletedAt!).map(summaryOf)
 }
 

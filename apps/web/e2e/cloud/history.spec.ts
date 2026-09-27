@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { checkIn, openSessionMenu, startGame, recordWin } from '../helpers'
+import { checkIn, openFromList, openSessionMenu, openSessionsList, startGame, recordWin } from '../helpers'
 import {
   apiCreateClub,
   bearer,
@@ -239,9 +239,9 @@ test.describe('two clubs on one device', () => {
     await expectSignedIn(page)
     await page.waitForTimeout(2000)
     expect(await history(request, tokenB)()).toEqual([])
-    // It is still on this device.
+    // It is still on this device, but it is Alpha's: Bravo never sees it in Past sessions.
     await page.getByRole('button', { name: 'Past sessions' }).click()
-    await expect(page.getByRole('dialog', { name: 'Past sessions' }).getByRole('listitem')).toHaveCount(1)
+    await expect(page.getByRole('dialog', { name: 'Past sessions' }).getByText('No past sessions yet.')).toBeVisible()
     await page.keyboard.press('Escape')
 
     // When Alpha logs back in, it is sent to Alpha.
@@ -251,5 +251,34 @@ test.describe('two clubs on one device', () => {
     const tokenA = await storedToken(page)
     await expect.poll(async () => (await history(request, tokenA)()).map((s) => s.location)).toEqual(['Alpha Night'])
     expect(await history(request, tokenB)()).toEqual([])
+    await page.getByRole('button', { name: 'Past sessions' }).click()
+    await expect(page.getByRole('dialog', { name: 'Past sessions' }).getByRole('button', { name: /Alpha Night/ })).toBeVisible()
+  })
+
+  test('a session left open under one club is not listed for another club, and is there again for its own', async ({
+    page,
+    request,
+  }) => {
+    const clubA = uniqueClub('Alpha')
+    const clubB = uniqueClub('Bravo')
+    await apiCreateClub(request, clubA)
+    await apiCreateClub(request, clubB)
+
+    await signInAndPlay(page, clubA, 'Alpha Open')
+    await openSessionMenu(page)
+    await page.getByRole('button', { name: 'Leave session' }).click()
+    await expect(openSessionsList(page).getByText('Alpha Open')).toBeVisible()
+    await page.getByRole('button', { name: 'Log out' }).click()
+
+    await uiLogin(page, clubB)
+    await expectSignedIn(page)
+    await page.waitForTimeout(2000)
+    await expect(page.getByText('Alpha Open')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Log out' }).click()
+    await uiLogin(page, clubA)
+    await expectSignedIn(page)
+    await openFromList(page, 'Alpha Open')
+    await expect(page.getByRole('heading', { name: 'Alpha Open' })).toBeVisible()
   })
 })

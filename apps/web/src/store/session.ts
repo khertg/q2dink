@@ -24,7 +24,7 @@ import { newBatchId } from '@/cloud/id'
 import { describeAction } from './auditText'
 import type { LifetimeCounts } from '@/rotation/lifetime'
 import { migrateSession, SESSION_STORE_VERSION } from './migrate'
-import { NONE_OPEN, notAppliedAudits, park, unpark, type SessionSlice } from './slices'
+import { belongsTo, NONE_OPEN, notAppliedAudits, park, unpark, type SessionSlice } from './slices'
 import { deviceRef } from '@/lib/device'
 import { useClubAuth } from '@/cloud/auth'
 
@@ -62,6 +62,23 @@ interface SessionStore {
    * adopted from another device keeps this name rather than bringing the old one back.
    */
   locationPending: boolean
+  /**
+   * The club the open session belongs to: the one signed in when it was created, resumed, joined or opened here.
+   * While another club is signed in it is parked, never shown or sent. Missing: none yet (older data, no cloud).
+   */
+  clubSlug?: string
+  /**
+   * Sessions that ended here, by id, with the club they belong to, so an end waiting to be sent only ever goes
+   * to that club. Missing entry: any club (ended before this was kept).
+   */
+  endedClubs?: Record<string, string>
+
+  /**
+   * Put the open session away when it belongs to a club other than `slug` (just signed in): it is parked under its
+   * own club, not paused (its club may still run it on other devices), and shown again when that club logs in.
+   * An open session with no club yet is taken by this one.
+   */
+  parkIfOtherClub: (slug: string) => void
 
   /**
    * Create a session and open it, not started: players can be checked in, but no clock runs and no game
@@ -250,6 +267,7 @@ export const useSessionStore = create<SessionStore>()(
             base: null,
             pending: [],
             locationPending: false,
+            clubSlug: useClubAuth.getState().club?.slug,
           }))
           const courts = `${courtCount} court${courtCount === 1 ? '' : 's'}`
           recordAudit('sessionCreated', `Created “${location}” (${mode === 'doubles' ? 'Doubles' : 'Singles'}, ${courts})`, sessionId)
@@ -274,7 +292,13 @@ export const useSessionStore = create<SessionStore>()(
         openSession: (sessionId) => {
           const slice = get().parked[sessionId]
           if (!slice || get().sessionId === sessionId) return
-          set((state) => ({ parked: unpark(park(state.parked, state, useClubAuth.getState().club?.slug), sessionId), ...slice, previous: null }))
+          set((state) => ({
+            parked: unpark(park(state.parked, state, useClubAuth.getState().club?.slug), sessionId),
+            ...slice,
+            // Opened here, it belongs to the club signed in unless it already has one.
+            clubSlug: slice.clubSlug ?? useClubAuth.getState().club?.slug,
+            previous: null,
+          }))
           recordAudit('sessionOpened', `Opened “${slice.location}”`, sessionId)
         },
 
@@ -285,6 +309,13 @@ export const useSessionStore = create<SessionStore>()(
           }),
 
         dropParked: (sessionId) => set((state) => ({ parked: unpark(state.parked, sessionId) })),
+
+        parkIfOtherClub: (slug) => {
+          const { session, clubSlug } = get()
+          if (!session || clubSlug === slug) return
+          if (!clubSlug) return set({ clubSlug: slug })
+          set((state) => ({ parked: park(state.parked, state), ...NONE_OPEN, previous: null }))
+        },
 
         renameSession: (name) => {
           requireSession(get().session)
@@ -435,6 +466,7 @@ export const useSessionStore = create<SessionStore>()(
             base: null,
             pending: [],
             locationPending: false,
+            clubSlug: useClubAuth.getState().club?.slug,
           })),
 
         shareSession: () => {
@@ -482,6 +514,7 @@ export const useSessionStore = create<SessionStore>()(
             base: { revision, session },
             pending: [],
             locationPending: false,
+            clubSlug: useClubAuth.getState().club?.slug,
           })),
 
         /** Record which all-time totals this session has now contributed, after saving them. */
@@ -495,6 +528,10 @@ export const useSessionStore = create<SessionStore>()(
               state.session && !state.endedSessionIds.includes(state.sessionId)
                 ? [...state.endedSessionIds, state.sessionId]
                 : state.endedSessionIds,
+            // Its end is only ever sent to its own club.
+            ...(state.session && state.clubSlug
+              ? { endedClubs: { ...state.endedClubs, [state.sessionId]: state.clubSlug } }
+              : {}),
           })),
       }
     },
@@ -532,7 +569,20 @@ export const useSessionStore = create<SessionStore>()(
       storage: createJSONStorage(() => localStorage),
       // The undo snapshot only makes sense for a few seconds, so never persist it.
       // `base` and `pending` are kept, so changes made offline still reach the club after a reload.
-      partialize: ({ location, session, sessionId, startedAt, lifetimeCounted, base, pending, endedSessionIds, parked, locationPending }) => ({
+      partialize: ({
+        location,
+        session,
+        sessionId,
+        startedAt,
+        lifetimeCounted,
+        base,
+        pending,
+        endedSessionIds,
+        endedClubs,
+        parked,
+        locationPending,
+        clubSlug,
+      }) => ({
         location,
         locationPending,
         session,
@@ -542,11 +592,29 @@ export const useSessionStore = create<SessionStore>()(
         base,
         pending,
         endedSessionIds,
+        endedClubs,
         parked,
+        clubSlug,
       }),
     },
   ),
 )
+
+/** Whether the open session (if any) belongs with this club: one owned by another club is never shown or sent. */
+export const openBelongsTo = (clubSlug: string | null | undefined) =>
+  belongsTo(useSessionStore.getState().clubSlug, clubSlug)
+
+/**
+ * A session belongs to its club: when another club logs in on this device, the open session is put away at once,
+ * before the cloud sync reacts to the login (it subscribed later), so it is never shown, sent or taken as ended.
+ */
+function guardOpenSession(slug: string | undefined) {
+  if (slug) useSessionStore.getState().parkIfOtherClub(slug)
+}
+guardOpenSession(useClubAuth.getState().club?.slug)
+useClubAuth.subscribe((state, prev) => {
+  if (state.club?.slug !== prev.club?.slug) guardOpenSession(state.club?.slug)
+})
 
 /** Number of players currently checked in and not on a break (queued or playing). */
 export const activePlayerCount = (session: SessionState) =>

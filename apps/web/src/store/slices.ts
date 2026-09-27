@@ -34,6 +34,8 @@ export interface OpenFields {
   base: { revision: number; session: SessionState } | null
   pending: PendingAction[]
   locationPending: boolean
+  /** The club the open session belongs to (see SessionSlice.clubSlug). Missing: none yet. */
+  clubSlug?: string
 }
 
 /** The open fields with no session open. */
@@ -46,28 +48,46 @@ export const NONE_OPEN: OpenFields = {
   base: null,
   pending: [],
   locationPending: false,
+  clubSlug: undefined,
 }
 
 /** The open session as a slice, or null when none is open. */
 export function sliceOf(open: OpenFields): SessionSlice | null {
   if (!open.session) return null
-  const { location, session, sessionId, startedAt, lifetimeCounted, base, pending, locationPending } = open
-  return { location, session, sessionId, startedAt, lifetimeCounted, base, pending, locationPending }
+  const { location, session, sessionId, startedAt, lifetimeCounted, base, pending, locationPending, clubSlug } = open
+  return {
+    location,
+    session,
+    sessionId,
+    startedAt,
+    lifetimeCounted,
+    base,
+    pending,
+    locationPending,
+    ...(clubSlug ? { clubSlug } : {}),
+  }
 }
 
-/** `parked` with the open session (if any) put away in it, for the club signed in now (if any). */
+/**
+ * `parked` with the open session (if any) put away in it. It keeps the club it belongs to; one that has none yet
+ * takes the club signed in now (if any).
+ */
 export function park(
   parked: Record<string, SessionSlice>,
   open: OpenFields,
   clubSlug?: string | null,
 ): Record<string, SessionSlice> {
   const slice = sliceOf(open)
-  return slice ? { ...parked, [slice.sessionId]: { ...slice, ...(clubSlug ? { clubSlug } : {}) } } : parked
+  if (!slice) return parked
+  const owner = slice.clubSlug ?? clubSlug
+  return { ...parked, [slice.sessionId]: { ...slice, ...(owner ? { clubSlug: owner } : {}) } }
 }
 
+/** Whether a session owned by `owner` belongs with this club (or none signed in). One with no owner goes with any. */
+export const belongsTo = (owner: string | undefined, clubSlug: string | null | undefined) => !owner || owner === clubSlug
+
 /** Whether a parked session belongs with this club (or none signed in): one left for another club never does. */
-export const parkedFor = (slice: SessionSlice, clubSlug: string | null | undefined) =>
-  !slice.clubSlug || slice.clubSlug === clubSlug
+export const parkedFor = (slice: SessionSlice, clubSlug: string | null | undefined) => belongsTo(slice.clubSlug, clubSlug)
 
 /** `parked` without one session. */
 export function unpark(parked: Record<string, SessionSlice>, sessionId: string): Record<string, SessionSlice> {

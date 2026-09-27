@@ -67,9 +67,10 @@ describe('recording session changes', () => {
     store().startSession('Open play', 'doubles', 2)
     store().checkInPlayer(player(1))
     store().startClock()
-    await vi.waitFor(async () => expect((await queued()).map((e) => e.summary)).toEqual([
-      'Created “Open play” (Doubles, 2 courts)',
+    // Sorted by name: changes made within the same millisecond have no order by time.
+    await vi.waitFor(async () => expect((await queued()).map((e) => e.summary).sort()).toEqual([
       'Checked in P1',
+      'Created “Open play” (Doubles, 2 courts)',
       'Started the session: waiting times run from now',
     ]))
     expect((await queued()).every((e) => e.sessionId === store().sessionId && e.clubSlug === 'downtown')).toBe(true)

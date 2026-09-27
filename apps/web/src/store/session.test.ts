@@ -13,7 +13,9 @@ vi.hoisted(() => {
   })
 })
 
-import { activePlayerCount, useSessionStore } from './session'
+import { useClubAuth } from '@/cloud/auth'
+import { park } from './slices'
+import { activePlayerCount, openBelongsTo, useSessionStore } from './session'
 
 const player = (id: number): RosterPlayer => ({ id, name: `P${id}`, skill: 3 })
 const store = () => useSessionStore.getState()
@@ -29,7 +31,18 @@ function checkInMany(count: number) {
 }
 
 beforeEach(() => {
-  useSessionStore.setState({ location: '', session: null, previous: null, parked: {}, endedSessionIds: [], base: null, pending: [] })
+  useSessionStore.setState({
+    location: '',
+    session: null,
+    previous: null,
+    parked: {},
+    endedSessionIds: [],
+    endedClubs: {},
+    base: null,
+    pending: [],
+    clubSlug: undefined,
+  })
+  useClubAuth.setState({ club: null })
 })
 
 describe('session store', () => {
@@ -791,6 +804,66 @@ describe('several sessions on one device', () => {
     await useSessionStore.persist.rehydrate()
     expect(store().endedSessionIds).toEqual(['old-one'])
     expect(store().parked).toEqual({})
+  })
+})
+
+describe('a session belongs to its club', () => {
+  const downtown = { slug: 'downtown', name: 'Downtown', token: 'tok-1' }
+  const uptown = { slug: 'uptown', name: 'Uptown', token: 'tok-2' }
+
+  it('is the club signed in when it is created, and is put away (not paused) when another club logs in', () => {
+    useClubAuth.setState({ club: downtown })
+    startRunning('Downtown night', 'doubles', 1)
+    const id = store().sessionId
+    expect(store().clubSlug).toBe('downtown')
+    expect(openBelongsTo('downtown')).toBe(true)
+    expect(openBelongsTo('uptown')).toBe(false)
+
+    useClubAuth.setState({ club: null })
+    expect(store().session).not.toBeNull() // behind the login screen, nothing changes yet
+    useClubAuth.setState({ club: uptown })
+    expect(store().session).toBeNull()
+    expect(store().clubSlug).toBeUndefined()
+    expect(store().parked[id]).toMatchObject({ clubSlug: 'downtown' })
+    expect(store().parked[id].session.clockStoppedAt).toBeUndefined()
+
+    // Downtown again: it opens as Downtown's.
+    useClubAuth.setState({ club: downtown })
+    store().openSession(id)
+    expect(store()).toMatchObject({ sessionId: id, clubSlug: 'downtown' })
+  })
+
+  it('stays open when the same club logs in again, and one with no club yet is taken by the club that logs in', () => {
+    useClubAuth.setState({ club: downtown })
+    startRunning('Downtown night', 'doubles', 1)
+    useClubAuth.setState({ club: null })
+    useClubAuth.setState({ club: downtown })
+    expect(store().session).not.toBeNull()
+
+    useClubAuth.setState({ club: null })
+    useSessionStore.setState({ clubSlug: undefined })
+    useClubAuth.setState({ club: uptown })
+    expect(store()).toMatchObject({ clubSlug: 'uptown' })
+    expect(store().session).not.toBeNull()
+  })
+
+  it('keeps its club when parked, whoever is signed in; one with none takes the club signed in', () => {
+    useClubAuth.setState({ club: downtown })
+    startRunning('Downtown night', 'doubles', 1)
+    const id = store().sessionId
+    expect(park({}, store(), 'uptown')[id].clubSlug).toBe('downtown')
+    expect(park({}, { ...store(), clubSlug: undefined }, 'uptown')[id].clubSlug).toBe('uptown')
+    expect(park({}, { ...store(), clubSlug: undefined })[id].clubSlug).toBeUndefined()
+  })
+
+  it('remembers which club an ended session belongs to, across a reload', async () => {
+    useClubAuth.setState({ club: downtown })
+    store().startSession('Downtown night', 'doubles', 1)
+    const id = store().sessionId
+    store().endSession()
+    expect(store().endedClubs).toEqual({ [id]: 'downtown' })
+    await useSessionStore.persist.rehydrate()
+    expect(store().endedClubs).toEqual({ [id]: 'downtown' })
   })
 })
 
