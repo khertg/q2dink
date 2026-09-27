@@ -220,10 +220,11 @@ export function BoardScreen({ session }: { session: SessionState }) {
   return (
     <div className="space-y-4">
       <CourtGrid>
-        {session.courts.map((court) => (
+        {session.courts.map((court, index) => (
           <CourtCard
             key={court.id}
             court={court}
+            position={{ index, count: session.courts.length }}
             players={session.players}
             candidates={candidates}
             slotsPerTeam={slotsPerTeam}

@@ -13,6 +13,15 @@ export async function playerAction(scope: Locator | Page, name: string, item: 'S
   await page.locator('[data-slot="popover-content"]').getByRole('button', { name: item }).click()
 }
 
+/** On the Check-in tab, open a waiting player's ⋮ menu and choose one of its items. */
+export async function waitingAction(page: Page, name: string, item: 'Take a break' | 'Remove from session') {
+  const trigger = page.getByRole('list', { name: 'Waiting players' }).getByRole('button', { name: `${name} menu` })
+  // Mid-screen, so the menu does not open under the check-in toasts at the bottom of a phone screen.
+  await trigger.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await trigger.click()
+  await page.locator('[data-slot="popover-content"]').getByRole('button', { name: item }).click()
+}
+
 /** Open a shadcn Select by its label and pick an option by name. */
 export async function choose(page: Page, label: string | RegExp, option: string | RegExp) {
   await page.getByLabel(label).click()

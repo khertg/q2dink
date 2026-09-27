@@ -23,7 +23,7 @@ test.describe('automatic avatars', () => {
     // Same name, same colour, in the queue and on the check-in tab.
     const inQueue = await color(avatarOf(queueRow(page, 'Eve'), 'Eve'))
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    const waiting = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Take a break' }) })
+    const waiting = page.getByRole('list', { name: 'Waiting players' }).getByRole('listitem')
     expect(await color(avatarOf(waiting.filter({ hasText: 'Eve' }), 'Eve'))).toBe(inQueue)
   })
 
@@ -46,7 +46,7 @@ test.describe('changing an avatar', () => {
     await expect(avatarOf(queueRow(page, 'Ann'), 'Ann')).toHaveAttribute('data-emoji', '🎾')
     await expect(avatarOf(page.getByRole('group', { name: 'Next up' }), 'Ann')).toHaveAttribute('data-avatar-kind', 'emoji')
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    const waiting = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Take a break' }) })
+    const waiting = page.getByRole('list', { name: 'Waiting players' }).getByRole('listitem')
     await expect(avatarOf(waiting.filter({ hasText: 'Ann' }), 'Ann')).toHaveAttribute('data-avatar-kind', 'emoji')
     await page.getByRole('tab', { name: 'Board' }).click()
     await startGame(page)
@@ -169,7 +169,7 @@ test.describe('seeing an avatar large', () => {
       await expect(view).toHaveCount(0)
     }
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    const view = await viewAvatar(page, 'Cy', page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Take a break' }) }))
+    const view = await viewAvatar(page, 'Cy', page.getByRole('list', { name: 'Waiting players' }).getByRole('listitem'))
     await expect(view).toBeVisible()
   })
 

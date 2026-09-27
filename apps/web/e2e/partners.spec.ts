@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, recordWin, startGame, startSession } from './helpers'
+import { checkIn, choose, recordWin, startGame, startSession, waitingAction } from './helpers'
 
 const NAMES = ['Suzy', 'Ann', 'Bob', 'Cy', 'Tong', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo']
 
@@ -102,7 +102,7 @@ test.describe('locking a partner who is on a court', () => {
     await startSession(page)
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal'])
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    await page.getByRole('listitem').filter({ hasText: 'Ann' }).getByRole('button', { name: 'Take a break' }).click()
+    await waitingAction(page, 'Ann', 'Take a break')
     await choose(page, 'First partner', 'Ann')
     await choose(page, 'Second partner', 'Eve')
     await page.getByRole('button', { name: 'Lock partners' }).click()

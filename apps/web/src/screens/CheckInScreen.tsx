@@ -16,6 +16,7 @@ import {
 import { AddPlayerForm } from '@/components/AddPlayerForm'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import { RosterCheckIn } from '@/components/RosterCheckIn'
+import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
 import {
   Select,
   SelectContent,
@@ -241,7 +242,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
           {session.queue.length === 0 ? (
             <p className="text-sm text-muted-foreground">No one is waiting.</p>
           ) : (
-            <ul className="divide-y">
+            <ul className="divide-y" aria-label="Waiting players">
               {session.queue.map((id) => (
                 <li key={id} className="flex items-center gap-3 py-2">
                   <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -249,10 +250,11 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                     <span className="min-w-0 truncate">{session.players[id].name}</span>
                   </span>
                   <SkillBadge player={session.players[id]} display="name" onChange={(skill) => changeSkill(id, skill)} />
-                  <Button variant="outline" size="sm" onClick={() => checkOutPlayer(id)}>
-                    Take a break
-                  </Button>
-                  {removeButton(id)}
+                  <WaitingPlayerMenu
+                    name={session.players[id].name}
+                    onTakeBreak={() => checkOutPlayer(id)}
+                    onRemoveFromSession={() => setRemoving(id)}
+                  />
                 </li>
               ))}
             </ul>

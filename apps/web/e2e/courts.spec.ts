@@ -370,3 +370,71 @@ test.describe('skill levels per court', () => {
     await expect(court.getByText('In play')).toBeVisible()
   })
 })
+
+test.describe('the court card menu', () => {
+  const court = (page: Page, name: string) => page.getByRole('region', { name, exact: true })
+  const menuItem = (page: Page, item: string) =>
+    page.locator('[data-slot="popover-content"]').getByRole('button', { name: item })
+
+  async function courtAction(page: Page, name: string, item: string) {
+    await court(page, name).getByRole('button', { name: 'Court menu' }).click()
+    await menuItem(page, item).click()
+    await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0)
+  }
+
+  test('renames a court, and keeps the typed name when it is taken', async ({ page }) => {
+    await startSession(page, { courts: 2 })
+    await courtAction(page, 'Court 1', 'Rename…')
+    const dialog = page.getByRole('dialog', { name: 'Rename Court 1' })
+    await dialog.getByLabel('Court name').fill('Court 2')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await expect(dialog.getByRole('alert')).toBeVisible()
+    await expect(dialog.getByLabel('Court name')).toHaveValue('Court 2')
+    await dialog.getByLabel('Court name').fill('Center')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(await courtOrder(page)).toEqual(['Center', 'Court 2'])
+  })
+
+  test('keeps a court for skill levels', async ({ page }) => {
+    await startSession(page, { courts: 2 })
+    await courtAction(page, 'Court 2', 'Skill levels…')
+    const dialog = page.getByRole('dialog', { name: 'Skill levels for Court 2' })
+    await dialog.getByLabel('Lowest level for Court 2').click()
+    await page.getByRole('option', { name: '3.5 · Upper Intermediate', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await expect(court(page, 'Court 2').getByRole('img', { name: 'Skill levels: 3.5+' })).toBeVisible()
+    await expect(court(page, 'Court 1').getByRole('img', { name: 'Skill levels: All levels' })).toBeVisible()
+  })
+
+  test('moves a court up and down the board', async ({ page }) => {
+    await startSession(page, { courts: 3 })
+    await court(page, 'Court 1').getByRole('button', { name: 'Court menu' }).click()
+    await expect(menuItem(page, 'Move up')).toBeDisabled()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0)
+    await courtAction(page, 'Court 3', 'Move up')
+    expect(await courtOrder(page)).toEqual(['Court 1', 'Court 3', 'Court 2'])
+    await courtAction(page, 'Court 1', 'Move down')
+    expect(await courtOrder(page)).toEqual(['Court 3', 'Court 1', 'Court 2'])
+  })
+
+  test('closes an open court at once, and asks before closing a game in progress', async ({ page }) => {
+    await startSession(page, { courts: 3 })
+    await courtAction(page, 'Court 3', 'Close court')
+    await expect(page.getByText('Court 3 closed')).toBeVisible()
+    expect(await courtOrder(page)).toEqual(['Court 1', 'Court 2'])
+
+    await checkIn(page, EIGHT.slice(0, 4))
+    await startGame(page)
+    await courtAction(page, 'Court 1', 'Close court')
+    const dialog = page.getByRole('dialog', { name: 'Close Court 1?' })
+    await dialog.getByRole('button', { name: 'Cancel game and close' }).click()
+    expect(await courtOrder(page)).toEqual(['Court 2'])
+    await expect(page.getByText('Queue (4)')).toBeVisible()
+
+    await court(page, 'Court 2').getByRole('button', { name: 'Court menu' }).click()
+    await expect(menuItem(page, 'Close court')).toBeDisabled()
+    await expect(menuItem(page, 'Close court')).toContainText('A session needs at least one court')
+  })
+})

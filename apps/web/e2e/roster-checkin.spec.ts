@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, openSessionMenu, startSession, type PlayerSpec } from './helpers'
+import { checkIn, openSessionMenu, startSession, waitingAction, type PlayerSpec } from './helpers'
 
 /**
  * Save players on the roster by checking them in once, then end that session without
@@ -100,7 +100,7 @@ test('leaves out anyone already in the session, including people on a break', as
   await submit(page).click()
   await expect(page.getByText('2 players checked in')).toBeVisible()
 
-  await page.getByRole('listitem').filter({ hasText: 'Ann' }).getByRole('button', { name: 'Take a break' }).click()
+  await waitingAction(page, 'Ann', 'Take a break')
   await expect(page.getByText('On a break (1)')).toBeVisible()
   await expect(card(page).getByRole('checkbox')).toHaveCount(1)
   await expect(box(page, 'Cy')).toBeVisible()

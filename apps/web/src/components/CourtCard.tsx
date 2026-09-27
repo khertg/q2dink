@@ -1,10 +1,10 @@
-import { MoreVerticalIcon, Pause, Timer, Trophy } from 'lucide-react'
+import { Pause, Timer, Trophy } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CancelGameDialog } from '@/components/CancelGameDialog'
+import { CourtMenu } from '@/components/CourtMenu'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { ScoreDialog } from '@/components/ScoreDialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -59,6 +59,8 @@ interface Props {
   onCancel?: () => void
   /** While the session is not started or paused: why no game can start, shown instead of Start game. */
   stoppedReason?: string
+  /** Staff only: where the court is in board order, for its ⋮ menu (rename, levels, move, close). */
+  position?: { index: number; count: number }
 }
 
 /**
@@ -110,6 +112,7 @@ export function CourtCard({
   onScore,
   onCancel,
   stoppedReason,
+  position,
 }: Props) {
   // The team whose win button was pressed; the score pop-up is open while this is set.
   const [pendingWinner, setPendingWinner] = useState<0 | 1 | null>(null)
@@ -145,27 +148,14 @@ export function CourtCard({
           </span>
           <div className="flex shrink-0 items-center gap-2">
             {court.teams ? <PlayingBadge court={court} /> : <Badge variant="outline">Open</Badge>}
-            {court.teams && !readOnly && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label="Court menu">
-                    <MoreVerticalIcon aria-hidden="true" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-40 p-1">
-                  <PopoverClose asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full justify-start"
-                      // Nothing is lost clearing a court being set up, so it needs no confirmation.
-                      onClick={() => (staged ? onCancel?.() : setConfirmingCancel(true))}
-                    >
-                      {staged ? 'Clear court' : 'Cancel game'}
-                    </Button>
-                  </PopoverClose>
-                </PopoverContent>
-              </Popover>
+            {!readOnly && position && (
+              <CourtMenu
+                court={court}
+                index={position.index}
+                count={position.count}
+                // Nothing is lost clearing a court being set up, so it needs no confirmation.
+                onCancel={() => (staged ? onCancel?.() : setConfirmingCancel(true))}
+              />
             )}
           </div>
         </CardTitle>

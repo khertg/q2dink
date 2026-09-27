@@ -1,12 +1,11 @@
-import { Coffee, Lock, MoreVerticalIcon, UserX } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { partnerOf } from '@/matchmaking/grouping'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { SkillCountPills } from '@/components/SkillCountPills'
+import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
 import { useSessionNow } from '@/lib/time'
@@ -76,43 +75,11 @@ export function QueueList({
                       'Waiting'
                     )}
                   </span>
-                  {(onTakeBreak || onRemoveFromSession) && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`${player.name} menu`}>
-                          <MoreVerticalIcon aria-hidden="true" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-52 p-1">
-                        {onTakeBreak && (
-                          <PopoverClose asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="w-full justify-start"
-                              onClick={() => onTakeBreak(id)}
-                            >
-                              <Coffee aria-hidden="true" />
-                              Take a break
-                            </Button>
-                          </PopoverClose>
-                        )}
-                        {onRemoveFromSession && (
-                          <PopoverClose asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="w-full justify-start text-destructive hover:text-destructive"
-                              onClick={() => onRemoveFromSession(id)}
-                            >
-                              <UserX aria-hidden="true" />
-                              Remove from session
-                            </Button>
-                          </PopoverClose>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  )}
+                  <WaitingPlayerMenu
+                    name={player.name}
+                    onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
+                    onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
+                  />
                 </li>
               )
             })}

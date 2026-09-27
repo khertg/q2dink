@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, playerAction, recordWin, startGame, startSession } from './helpers'
+import { checkIn, choose, playerAction, recordWin, startGame, startSession, waitingAction } from './helpers'
 
 const SIX = ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay']
 const EIGHT = [...SIX, 'Gus', 'Hal']
@@ -24,7 +24,7 @@ async function nextUpTeams(page: Page) {
 /** Put a waiting player on a break from the Check-in tab, then go back to the Board. */
 async function takeBreak(page: Page, name: string) {
   await page.getByRole('tab', { name: 'Check-in' }).click()
-  await page.getByRole('listitem').filter({ hasText: name }).getByRole('button', { name: 'Take a break' }).click()
+  await waitingAction(page, name, 'Take a break')
   await page.getByRole('tab', { name: 'Board' }).click()
 }
 
@@ -197,7 +197,7 @@ test.describe('changing who is next up', () => {
     await expect(nextUp(page).getByText('Eve')).toBeVisible()
 
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    await page.getByRole('listitem').filter({ hasText: 'Eve' }).getByRole('button', { name: 'Take a break' }).click()
+    await waitingAction(page, 'Eve', 'Take a break')
     await page.getByRole('tab', { name: 'Board' }).click()
     for (const name of ['Ann', 'Bob', 'Cy', 'Dee']) await expect(nextUp(page).getByText(name)).toBeVisible()
     await expect(nextUp(page)).not.toContainText('Chosen by staff')
@@ -505,7 +505,7 @@ test.describe('removing a player from the session', () => {
     await startSession(page)
     await checkIn(page, SIX)
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    await page.getByRole('button', { name: 'Remove Fay from the session' }).click()
+    await waitingAction(page, 'Fay', 'Remove from session')
     await expect(page.getByRole('dialog')).toContainText('They can be checked in again later.')
     await confirmRemove(page, 'Fay')
     await expect(page.getByText('Fay left the session.')).toBeVisible()

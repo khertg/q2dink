@@ -31,7 +31,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  * Which skill levels a court is kept for: lowest and highest (both ends included). The full range is
  * "Any level". Changing it never touches a game in progress; the court's next game follows it.
  */
-function CourtLevels({ court }: { court: Court }) {
+export function CourtLevels({ court }: { court: Court }) {
   const setCourtLevels = useSessionStore((s) => s.setCourtLevels)
   const [min, max] = court.levels ?? [1, 6]
 

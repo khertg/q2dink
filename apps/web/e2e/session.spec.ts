@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { queueRow } from './avatarHelpers'
-import { checkIn, openSessionMenu, startGame, startSession, recordWin, playerAction } from './helpers'
+import { checkIn, openSessionMenu, startGame, startSession, recordWin, playerAction, waitingAction } from './helpers'
 
 const FIVE = ['Ann', 'Bob', 'Cy', 'Dee', 'Eve']
 
@@ -171,7 +171,7 @@ test('skips a player on a break when choosing who is next up', async ({ page }) 
   await startSession(page)
   await checkIn(page, FIVE)
   await page.getByRole('tab', { name: 'Check-in' }).click()
-  await page.getByRole('listitem').filter({ hasText: 'Ann' }).getByRole('button', { name: 'Take a break' }).click()
+  await waitingAction(page, 'Ann', 'Take a break')
   await page.getByRole('tab', { name: 'Board' }).click()
 
   const nextUp = page.getByRole('group', { name: 'Next up' })
@@ -199,7 +199,7 @@ test('lets a waiting player take a break and come back', async ({ page }) => {
   await startGame(page)
 
   await page.getByRole('tab', { name: 'Check-in' }).click()
-  await page.getByRole('button', { name: 'Take a break' }).click()
+  await waitingAction(page, 'Eve', 'Take a break')
   await expect(page.getByText('On a break (1)')).toBeVisible()
   await expect(page.getByText('No one is waiting.')).toBeVisible()
 

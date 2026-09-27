@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, openSessionMenu, recordWin, startGame, startSession } from './helpers'
+import { checkIn, openSessionMenu, recordWin, startGame, startSession, waitingAction } from './helpers'
 
 const EXPERT = '6 · Expert (5.0+)'
 const BEGINNER = '1 · Beginner (1.0)'
@@ -71,7 +71,7 @@ test.describe('editing a level in a session', () => {
     await startSession(page)
     await checkIn(page, ['Ann', 'Bob'])
     await page.getByRole('tab', { name: 'Check-in' }).click()
-    await page.getByRole('listitem').filter({ hasText: 'Ann' }).getByRole('button', { name: 'Take a break' }).click()
+    await waitingAction(page, 'Ann', 'Take a break')
     const row = page.getByRole('listitem').filter({ hasText: 'Ann' })
     await expect(page.getByText('On a break (1)')).toBeVisible()
     await levelButton(row, 'Ann').click()
