@@ -4,14 +4,27 @@ import type { PlayerAvatar } from '@/lib/avatar'
 import type { HistoryRecord } from './history'
 import { migrateLegacyDatabase } from './legacyMigration'
 
-export type SkillLevel = 1 | 2 | 3 | 4 | 5 | 6
+/**
+ * A level on a skill scale, 1 (the lowest) up to the number of levels the scale has (at most 10). Saved players
+ * keep a rating (see Player.rating); their level is worked out from it on whichever scale is in use.
+ */
+export type SkillLevel = number
 
 export type Gender = 'M' | 'F'
 
 export interface Player {
   id?: number
   name: string
+  /**
+   * On the roster: the rating's level on the default scale (what the club's older apps read). In a session: the level
+   * on the session's scale, which matchmaking and court ranges use.
+   */
   skill: SkillLevel
+  /**
+   * The player's rating (1.0 to 8.0, DUPR style), which decides their level on any scale. Missing for a player saved
+   * before ratings existed: `skill` (1 to 6) then stands for it (see ratingOf in lib/skill.ts).
+   */
+  rating?: number
   gender?: Gender
   /**
    * How this player appears. Kept on the roster only, never in a session, so photos stay out of

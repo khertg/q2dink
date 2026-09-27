@@ -63,7 +63,7 @@ export async function startSession(
 export interface PlayerSpec {
   name: string
   gender?: 'Male' | 'Female'
-  /** Option text such as '5 · Advanced (4.0-4.5)'. */
+  /** Option text such as '5 · Advanced (4.00–4.49)'. */
   skill?: string
 }
 

@@ -12,17 +12,19 @@ import type { Court, SessionState } from './types'
 export type LevelRange = [SkillLevel, SkillLevel]
 
 const MIN_LEVEL = 1
-const MAX_LEVEL = 6
 
-/** A valid range, or undefined for "any level" (which is also what the full 1 to 6 means). */
-export function normalizeLevels(levels: readonly number[] | null | undefined): LevelRange | undefined {
+/**
+ * A valid range on a scale of `maxLevel` levels, or undefined for "any level" (which is also what the whole scale
+ * means).
+ */
+export function normalizeLevels(levels: readonly number[] | null | undefined, maxLevel: number): LevelRange | undefined {
   if (!levels) return undefined
   const [min, max] = levels
-  const valid = (n: number) => Number.isInteger(n) && n >= MIN_LEVEL && n <= MAX_LEVEL
+  const valid = (n: number) => Number.isInteger(n) && n >= MIN_LEVEL && n <= maxLevel
   if (levels.length !== 2 || !valid(min) || !valid(max) || min > max) {
-    throw new RangeError('Choose a level range from 1 to 6, lowest first.')
+    throw new RangeError(`Choose a level range from 1 to ${maxLevel}, lowest first.`)
   }
-  if (min === MIN_LEVEL && max === MAX_LEVEL) return undefined
+  if (min === MIN_LEVEL && max === maxLevel) return undefined
   return [min as SkillLevel, max as SkillLevel]
 }
 

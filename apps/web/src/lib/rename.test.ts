@@ -46,7 +46,7 @@ describe('renameRosterPlayer', () => {
     await setRosterAvatar(ann.id, { kind: 'emoji', value: '🎾', color: '#123456' })
     expect(await renameRosterPlayer(ann.id, '  Anne ')).toEqual({ from: 'Ann', to: 'Anne' })
     const saved = await db.players.get(ann.id)
-    expect(saved).toMatchObject({ name: 'Anne', skill: 4, games: 9, wins: 5, losses: 4 })
+    expect(saved).toMatchObject({ name: 'Anne', rating: 4, skill: 5, games: 9, wins: 5, losses: 4 })
     expect(saved?.avatar).toEqual({ kind: 'emoji', value: '🎾', color: '#123456' })
     // A later check-in by the new name finds the same player.
     expect((await addOrGetPlayer('anne', 4)).id).toBe(ann.id)

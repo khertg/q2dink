@@ -6,7 +6,7 @@ import { fillCourts } from '@/rotation/testing'
 import type { SessionState } from '@/rotation/types'
 import { db } from './db'
 import { saveLifetimeStats } from './lifetime'
-import { addOrGetPlayer, setRosterSkill } from './roster'
+import { addOrGetPlayer, setRosterRating } from './roster'
 
 beforeEach(async () => {
   await db.players.clear()
@@ -26,11 +26,11 @@ describe('addOrGetPlayer', () => {
     expect(await db.players.count()).toBe(1)
   })
 
-  it('updates the saved skill and gender when they change', async () => {
+  it('updates the saved rating and gender when they change', async () => {
     await addOrGetPlayer('Ann', 3)
-    const updated = await addOrGetPlayer('Ann', 5, 'F')
-    expect(updated).toMatchObject({ skill: 5, gender: 'F' })
-    expect(await db.players.get(updated.id)).toMatchObject({ skill: 5, gender: 'F' })
+    const updated = await addOrGetPlayer('Ann', 4, 'F')
+    expect(updated).toMatchObject({ rating: 4, skill: 5, gender: 'F' })
+    expect(await db.players.get(updated.id)).toMatchObject({ rating: 4, skill: 5, gender: 'F' })
   })
 
   it('keeps a saved gender when none is supplied', async () => {
@@ -42,7 +42,7 @@ describe('addOrGetPlayer', () => {
     const created = await addOrGetPlayer('Ann', 3)
     await db.players.update(created.id, { games: 9, wins: 5, losses: 4 })
     const again = await addOrGetPlayer('Ann', 3)
-    expect(Object.keys(again).sort()).toEqual(['gender', 'id', 'name', 'skill'])
+    expect(Object.keys(again).sort()).toEqual(['gender', 'id', 'name', 'rating', 'skill'])
   })
 })
 
@@ -87,10 +87,10 @@ describe('saveLifetimeStats', () => {
   })
 })
 
-describe('setRosterSkill', () => {
+describe('setRosterRating', () => {
   it('changes the saved level, and a returning player keeps it', async () => {
     const ann = await addOrGetPlayer('Ann', 3, 'F')
-    await setRosterSkill(ann.id, 5)
+    await setRosterRating(ann.id, 4)
     expect(await db.players.get(ann.id)).toMatchObject({ skill: 5, gender: 'F' })
     // Checking in again without picking a level keeps what was edited (the picker starts from it).
     expect((await db.players.where('name').equals('Ann').first())?.skill).toBe(5)
@@ -100,7 +100,7 @@ describe('setRosterSkill', () => {
     const ann = await addOrGetPlayer('Ann', 3)
     const bob = await addOrGetPlayer('Bob', 3)
     await db.players.update(ann.id, { games: 4, wins: 3, losses: 1 })
-    await setRosterSkill(ann.id, 6)
+    await setRosterRating(ann.id, 4.5)
     expect(await db.players.get(bob.id)).toMatchObject({ skill: 3 })
     expect(await db.players.get(ann.id)).toMatchObject({ skill: 6, games: 4, wins: 3, losses: 1 })
   })

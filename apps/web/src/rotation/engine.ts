@@ -1,4 +1,5 @@
-import { MAX_COURT_NAME_LENGTH, MAX_PLAYER_NAME_LENGTH } from '@q2dink/shared'
+import { MAX_COURT_NAME_LENGTH, MAX_PLAYER_NAME_LENGTH, levelForRating, ratingForLevel, type SkillScale } from '@q2dink/shared'
+import { levelCount, ratingOf, sessionScale } from '../lib/skill'
 import type { SkillLevel } from '../db/db'
 import { TEAM_NAMES } from '../lib/teams'
 import { partnerOf, selectGroup, splitGroup } from '../matchmaking/grouping'
@@ -61,12 +62,14 @@ export interface SessionOptions {
   avgGameMinutes?: number
   /** Doubles only; singles is always first come, first served. */
   matchmaking?: MatchmakingMode
+  /** The club's skill levels; missing means the default scale. */
+  skillScale?: SkillScale
 }
 
 export function createSession(
   mode: GameMode,
   courtCount: number,
-  { avgGameMinutes = DEFAULT_AVG_GAME_MINUTES, matchmaking = 'balanced' }: SessionOptions = {},
+  { avgGameMinutes = DEFAULT_AVG_GAME_MINUTES, matchmaking = 'balanced', skillScale }: SessionOptions = {},
 ): SessionState {
   if (!Number.isInteger(courtCount) || courtCount < MIN_COURTS || courtCount > MAX_COURTS) {
     throw new RangeError(`courtCount must be an integer from ${MIN_COURTS} to ${MAX_COURTS}`)
@@ -89,6 +92,7 @@ export function createSession(
     players: {},
     queue: [],
     onBreak: [],
+    ...(skillScale ? { skillScale } : {}),
   }
 }
 
@@ -150,7 +154,7 @@ export function renameCourt(state: SessionState, courtId: number, name: string):
  */
 export function setCourtLevels(state: SessionState, courtId: number, levels: readonly number[] | null): SessionState {
   findCourt(state, courtId)
-  const range = normalizeLevels(levels)
+  const range = normalizeLevels(levels, levelCount(sessionScale(state)))
   return {
     ...state,
     courts: state.courts.map((c) => {
@@ -196,9 +200,43 @@ export function closeCourt(state: SessionState, courtId: number, now?: number): 
 export function setPlayerSkill(state: SessionState, playerId: number, skill: SkillLevel): SessionState {
   const player = state.players[playerId]
   if (!player) throw new Error(`Player ${playerId} is not in this session`)
-  if (!Number.isInteger(skill) || skill < 1 || skill > 6) throw new RangeError('Skill level must be 1 to 6')
+  const scale = sessionScale(state)
+  const top = levelCount(scale)
+  if (!Number.isInteger(skill) || skill < 1 || skill > top) throw new RangeError(`Skill level must be 1 to ${top}`)
   if (player.skill === skill) return state
-  return { ...state, players: { ...state.players, [playerId]: { ...player, skill } } }
+  // Their rating becomes where the level starts, so the level holds if the session's scale changes.
+  const rating = ratingForLevel(scale, skill)
+  return { ...state, players: { ...state.players, [playerId]: { ...player, skill, rating } } }
+}
+
+/**
+ * Use other skill levels for this session (the club's new ones). Each player's level is worked out again from their
+ * rating, and each court kept for a range keeps the ratings it covered: its new range is the new levels those ratings
+ * fall in (a range that now covers the whole scale becomes "any level"). Games on a court keep their teams.
+ */
+export function setSkillScale(state: SessionState, scale: SkillScale): SessionState {
+  const old = sessionScale(state)
+  const top = levelCount(scale)
+  const players = Object.fromEntries(
+    Object.entries(state.players).map(([id, p]) => {
+      const rating = ratingOf(p)
+      return [id, { ...p, rating, skill: levelForRating(scale, rating) }]
+    }),
+  )
+  const courts = state.courts.map((court) => {
+    if (!court.levels) return court
+    // A range an older app set can run past the session's levels (it knows six): read it as ending at the top.
+    const oldTop = levelCount(old)
+    const min = Math.min(court.levels[0], oldTop)
+    const max = Math.min(court.levels[1], oldTop)
+    const low = levelForRating(scale, old.levels[min - 1].from)
+    const next = old.levels[max]
+    // The old range ends just before its next level starts; with none above it, at the top of the new scale.
+    const high = next ? Math.max(low, levelForRating(scale, next.from - 0.001)) : top
+    const { levels: _old, ...rest } = court
+    return low <= 1 && high >= top ? rest : { ...rest, levels: [low, high] as LevelRange }
+  })
+  return { ...state, players, courts, skillScale: scale }
 }
 
 /** A player's name as it will be kept: trimmed, 1 to 80 characters. Throws a RangeError with a readable message. */

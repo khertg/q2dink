@@ -38,6 +38,8 @@ import {
   winnerScoreProblem,
   setAvgGameMinutes,
   setPlayerSkill,
+  setCourtLevels,
+  setSkillScale,
   lastActivityAt,
   shiftSessionClock,
   isLive,
@@ -1936,5 +1938,59 @@ describe('removing a player from the session', () => {
     const s = withPlayers(createSession('doubles', 1), 2)
     expect(() => removePlayer(s, 9)).toThrow('not in the session')
     expect(() => removePlayer(removePlayer(s, 1), 1)).toThrow('not in the session')
+  })
+})
+
+describe('skill scales in a session', () => {
+  const FOUR = {
+    levels: [
+      { label: 'Social', from: 1 },
+      { label: 'Club', from: 3 },
+      { label: 'Strong', from: 4 },
+      { label: 'Pro', from: 5 },
+    ],
+  }
+
+  it('gives a player the rating their new level starts at, and checks the level against the session’s scale', () => {
+    let s = createSession('doubles', 1, { skillScale: FOUR })
+    s = checkIn(s, { id: 1, name: 'Ann', skill: 2, rating: 3.2 })
+    s = setPlayerSkill(s, 1, 3)
+    expect(s.players[1]).toMatchObject({ skill: 3, rating: 4 })
+    expect(() => setPlayerSkill(s, 1, 5)).toThrow('Skill level must be 1 to 4')
+    expect(() => setCourtLevels(s, 1, [2, 5])).toThrow('from 1 to 4')
+    expect(setCourtLevels(s, 1, [2, 4]).courts[0].levels).toEqual([2, 4])
+    expect(setCourtLevels(s, 1, [1, 4]).courts[0]).not.toHaveProperty('levels')
+  })
+
+  it('moves everyone to their level on new levels, from their rating, and keeps courts on the same ratings', () => {
+    // The default scale; Ann has a DUPR-style rating, Bob only his old level 6 (4.5).
+    let s = createSession('doubles', 2)
+    s = checkIn(s, { id: 1, name: 'Ann', skill: 4, rating: 3.742 })
+    s = checkIn(s, { id: 2, name: 'Bob', skill: 6 })
+    s = setCourtLevels(s, 1, [4, 6]) // 3.50 and up
+    s = setCourtLevels(s, 2, [1, 3]) // up to 3.49
+    const t = setSkillScale(s, FOUR)
+    expect(t.skillScale).toEqual(FOUR)
+    expect(t.players[1]).toMatchObject({ skill: 2, rating: 3.742 })
+    expect(t.players[2]).toMatchObject({ skill: 3, rating: 4.5 })
+    expect(t.courts[0].levels).toEqual([2, 4]) // 3.50+ falls in Club (3.0) and up
+    expect(t.courts[1].levels).toEqual([1, 2]) // up to 3.49: Social and Club
+  })
+
+  it('copes with a court range beyond the session’s levels (set by an older app that knows six)', () => {
+    let s = createSession('doubles', 1, { skillScale: FOUR })
+    s = { ...s, courts: [{ ...s.courts[0], levels: [3, 6] }] }
+    const t = setSkillScale(s, { levels: [{ label: 'Low', from: 1 }, { label: 'Mid', from: 3 }, { label: 'High', from: 4.5 }] })
+    expect(t.courts[0].levels).toEqual([2, 3]) // from 4.0 (Strong) to the top
+    const above = { ...s, courts: [{ ...s.courts[0], levels: [5, 6] as [number, number] }] }
+    expect(setSkillScale(above, { levels: [{ label: 'Low', from: 1 }, { label: 'High', from: 4.5 }] }).courts[0].levels).toEqual([2, 2])
+  })
+
+  it('makes a court whose ratings now span the whole scale open to any level', () => {
+    let s = setCourtLevels(createSession('doubles', 1), 1, [2, 6]) // 2.50 and up
+    s = setSkillScale(s, { levels: [{ label: 'Low', from: 1 }, { label: 'High', from: 2.5 }] })
+    expect(s.courts[0].levels).toEqual([2, 2])
+    s = setSkillScale(s, { levels: [{ label: 'A', from: 1 }, { label: 'B', from: 4 }] })
+    expect(s.courts[0]).not.toHaveProperty('levels')
   })
 })

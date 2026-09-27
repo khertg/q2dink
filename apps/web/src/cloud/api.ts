@@ -7,6 +7,7 @@ import type {
   DeletedHistorySummary,
   AvatarIndex,
   ClubRosterPlayer,
+  SkillScale,
   ErrorCode,
   HistorySummary,
   LifetimePlayer,
@@ -83,6 +84,10 @@ export interface CloudApi {
   putRoster(token: string, players: ClubRosterPlayer[]): Promise<void>
   /** The club's saved roster, shared by all its staff devices. */
   fetchRoster(token: string): Promise<ClubRosterPlayer[]>
+  /** The club's skill levels, or null when it uses the default scale. */
+  fetchSkillScale(token: string): Promise<SkillScale | null>
+  /** Set the club's skill levels (null: back to the default). Returns what the club kept. */
+  putSkillScale(token: string, scale: SkillScale | null): Promise<SkillScale | null>
 
   /** Keep an ended session in the club's history. Sending the same id again replaces it. */
   putHistory(token: string, id: string, entry: Omit<PutHistoryRequest, 'full'>, backup: FullBackup): Promise<void>

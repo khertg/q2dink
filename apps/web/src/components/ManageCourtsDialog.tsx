@@ -13,7 +13,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { SKILL_LEVELS } from '@/lib/skill'
+import { levelCount, levelsOf } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 import {
   isValidGameMinutes,
   MAX_AVG_GAME_MINUTES,
@@ -33,7 +34,10 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  */
 export function CourtLevels({ court }: { court: Court }) {
   const setCourtLevels = useSessionStore((s) => s.setCourtLevels)
-  const [min, max] = court.levels ?? [1, 6]
+  const scale = useSkillScale()
+  const levels = levelsOf(scale)
+  const top = levelCount(scale)
+  const [min, max] = court.levels ?? [1, top]
 
   function change(nextMin: number, nextMax: number) {
     try {
@@ -45,12 +49,14 @@ export function CourtLevels({ court }: { court: Court }) {
 
   const levelSelect = (which: 'lowest' | 'highest', value: number, onPick: (level: number) => void) => (
     <Select value={String(value)} onValueChange={(v) => onPick(Number(v))}>
-      <SelectTrigger aria-label={`${which === 'lowest' ? 'Lowest' : 'Highest'} level for ${court.name}`} className="w-24">
+      <SelectTrigger aria-label={`${which === 'lowest' ? 'Lowest' : 'Highest'} level for ${court.name}`} className="w-32">
         {/* Just the rating when closed, so it fits a phone; the list names each level in full. */}
-        <SelectValue>{SKILL_LEVELS.find((level) => level.value === value)?.rating}</SelectValue>
+        <SelectValue>
+          <span className="truncate">{levels.find((level) => level.value === value)?.rating}</span>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {SKILL_LEVELS.map((level) => (
+        {levels.map((level) => (
           <SelectItem key={level.value} value={String(level.value)}>
             {level.rating} · {level.label}
           </SelectItem>
@@ -67,7 +73,7 @@ export function CourtLevels({ court }: { court: Court }) {
       <span className="text-muted-foreground">to</span>
       {levelSelect('highest', max, (level) => change(Math.min(level, min), level))}
       {court.levels ? (
-        <Button type="button" variant="ghost" size="sm" onClick={() => change(1, 6)}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => change(1, top)}>
           Any level
         </Button>
       ) : (

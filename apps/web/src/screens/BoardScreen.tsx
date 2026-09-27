@@ -11,7 +11,7 @@ import type { Candidate } from '@/components/ReplacePlayerDialog'
 import { waitingMessage } from '@/lib/nextUp'
 import { playerStatuses } from '@/lib/playerStatus'
 import { removedMessage } from '@/lib/removal'
-import { levelLabel } from '@/lib/skill'
+import { levelLabel, sessionScale } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
 import { usePartnerOption } from '@/lib/usePartnerOption'
 import { useSkillEditor } from '@/lib/useSkillEditor'
@@ -62,7 +62,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
   const nextUpIds = lanes.flatMap((lane) => lane.group?.players ?? [])
   const levelLanes: NextUpLane[] | undefined = byLevel
     ? lanes.map((lane, index) => ({
-        label: levelLabel(lane.levels) ?? 'Any level',
+        label: levelLabel(sessionScale(session), lane.levels) ?? 'Any level',
         nextUp: lane.group?.players ?? [],
         emptyMessage: waitingMessage(session, lane.levels),
         spots: nextUpSpots(session, index),

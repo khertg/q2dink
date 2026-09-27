@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Gender, SkillLevel } from '@/db/db'
+import type { Gender } from '@/db/db'
 import { addOrGetPlayer, listRoster } from '@/db/roster'
 import { useClubAuth } from '@/cloud/auth'
 import { requestRosterSync } from '@/cloud/sync'
@@ -182,8 +182,8 @@ export function CheckInScreen({ session }: { session: SessionState }) {
 
   const genderRequired = session.mode === 'doubles' && session.matchmaking === 'mixed'
 
-  async function handleAdd(name: string, skill: SkillLevel, gender: Gender | undefined) {
-    const player = await addOrGetPlayer(name, skill, gender, clubSlug)
+  async function handleAdd(name: string, rating: number, gender: Gender | undefined) {
+    const player = await addOrGetPlayer(name, rating, gender, clubSlug)
     requestRosterSync()
     const added = checkInPlayer(player)
     toast(added ? `${player.name} checked in` : `${player.name} is already checked in`)

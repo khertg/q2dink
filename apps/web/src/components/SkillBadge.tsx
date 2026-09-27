@@ -9,9 +9,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { SkillLevel } from '@/db/db'
-import { SKILL_LEVELS, skillLabel, skillOptionLabel } from '@/lib/skill'
+import { levelsOf, skillLabel, skillOptionLabel } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 
 interface Props {
+  /** `skill` is the player's level on the scale in use (the session's, or the club's for saved players). */
   player: { name: string; skill: SkillLevel }
   /** "level" shows "Lv 3"; "name" shows the level's name, such as "Intermediate". */
   display?: 'level' | 'name'
@@ -25,11 +27,13 @@ interface Props {
  */
 export function SkillBadge({ player, display = 'level', onChange }: Props) {
   const [open, setOpen] = useState(false)
-  const text = display === 'level' ? `Lv ${player.skill}` : skillLabel(player.skill)
+  const scale = useSkillScale()
+  const label = skillLabel(scale, player.skill)
+  const text = display === 'level' ? `Lv ${player.skill}` : label
 
   if (!onChange) {
     return (
-      <Badge variant="secondary" title={skillLabel(player.skill)}>
+      <Badge variant="secondary" title={label}>
         {text}
       </Badge>
     )
@@ -40,8 +44,8 @@ export function SkillBadge({ player, display = 'level', onChange }: Props) {
       <Badge asChild variant="secondary" className="cursor-pointer hover:bg-secondary/70">
         <button
           type="button"
-          title={`${skillLabel(player.skill)}. Tap to change`}
-          aria-label={`Change ${player.name}'s level, now ${skillLabel(player.skill)}`}
+          title={`${label}. Tap to change`}
+          aria-label={`Change ${player.name}'s level, now ${label}`}
           onClick={(e) => {
             // Inside a checkbox row, tapping the level must not tick the box.
             e.preventDefault()
@@ -57,17 +61,18 @@ export function SkillBadge({ player, display = 'level', onChange }: Props) {
           <DialogHeader>
             <DialogTitle>Change {player.name}&apos;s level</DialogTitle>
             <DialogDescription>
-              {player.name} is {skillLabel(player.skill)} now. The new level is used for who they are
+              {player.name} is {label} now. The new level is used for who they are
               matched with from now on; games already on a court and results already recorded stay as they
               are.
             </DialogDescription>
           </DialogHeader>
           <ul className="space-y-2">
-            {SKILL_LEVELS.map((level) => (
+            {levelsOf(scale).map((level) => (
               <li key={level.value}>
                 <Button
                   variant={level.value === player.skill ? 'default' : 'outline'}
                   className="h-11 w-full justify-start"
+                  title={level.description}
                   aria-pressed={level.value === player.skill}
                   onClick={() => {
                     if (level.value !== player.skill) onChange(level.value)

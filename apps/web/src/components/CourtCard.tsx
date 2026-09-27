@@ -14,6 +14,7 @@ import { EmptyTeams, OpenTile, PlayerTile, TeamBox, Versus } from '@/components/
 import { SkillBadge } from '@/components/SkillBadge'
 import type { SkillLevel } from '@/db/db'
 import { levelLabel } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 import { TEAM_BUTTON, TEAM_NAMES } from '@/lib/teams'
 import { formatDuration, useSessionNow } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -125,7 +126,7 @@ export function CourtCard({
   const [filling, setFilling] = useState<{ team: 0 | 1; slot: number } | null>(null)
   // Players and open spots in place, so a removed player's spot stays where it was.
   const slots = courtSlots(court, slotsPerTeam)
-  const levels = levelLabel(court.levels)
+  const levels = levelLabel(useSkillScale(), court.levels)
   const short = !!court.teams && court.teams.some((team) => team.length < slotsPerTeam)
   const staged = !!court.notStarted
   const canFill = !readOnly && !!onFill

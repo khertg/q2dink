@@ -1,4 +1,4 @@
-import { levelLabel } from '@/lib/skill'
+import { levelLabel, sessionScale } from '@/lib/skill'
 import type { Lane } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 
@@ -31,7 +31,7 @@ export function playerStatuses(session: SessionState, lanes: Lane[]): PlayerStat
       (id): PlayerStatus => ({
         id,
         place: 'nextUp',
-        label: byLevel ? `Next up · ${levelLabel(lane.levels) ?? 'Any level'}` : 'Next up',
+        label: byLevel ? `Next up · ${levelLabel(sessionScale(session), lane.levels) ?? 'Any level'}` : 'Next up',
         lane: index,
         queuePlace: queuePlace(id),
       }),

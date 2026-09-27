@@ -194,3 +194,42 @@ describe('the session clock across devices', () => {
     expect(result.session.queuedAt?.[5]).toBe(10 * MIN)
   })
 })
+
+describe('levels on the session’s scale', () => {
+  const FOUR = { levels: [{ label: 'Social', from: 1 }, { label: 'Club', from: 3 }, { label: 'Strong', from: 4 }, { label: 'Pro', from: 5 }] }
+
+  it('checks a player in at the level their rating falls in, and keeps a level sent without a rating', () => {
+    const s = apply(createSession('doubles', 1, { skillScale: FOUR }), {
+      type: 'checkIn',
+      players: [
+        { name: 'Ann', skill: 1, rating: 4.2 },
+        { name: 'Bob', skill: 2 },
+      ],
+      now: 0,
+    })
+    expect(s.players[1]).toMatchObject({ skill: 3, rating: 4.2 })
+    expect(s.players[2]).toMatchObject({ skill: 2 })
+    expect(s.players[2]).not.toHaveProperty('rating')
+  })
+
+  it('puts a check-in made offline at its level on the scale another device switched the session to', () => {
+    const base = createSession('doubles', 1)
+    const club = apply(base, { type: 'setSkillScale', scale: FOUR })
+    const pending: PendingAction[] = [{ action: { type: 'checkIn', players: [{ name: 'Zed', skill: 6, rating: 4.5 }], now: 0 }, ids: [1] }]
+    // Here, on the default scale, Zed was level 6 (Elite / Pro); on the club's four levels 4.5 is Strong.
+    expect(apply(base, pending[0].action).players[1].skill).toBe(6)
+    expect(rebase(club, pending).session.players[1]).toMatchObject({ skill: 3, rating: 4.5 })
+  })
+
+  it('changes the session’s levels, also when replayed on the club’s copy', () => {
+    const club = apply(createSession('doubles', 1), {
+      type: 'checkIn',
+      players: [{ name: 'Ann', skill: 4, rating: 3.5 }],
+      now: 0,
+    })
+    const result = rebase(club, [{ action: { type: 'setSkillScale', scale: FOUR } }])
+    expect(result.dropped).toEqual([])
+    expect(result.session.skillScale).toEqual(FOUR)
+    expect(result.session.players[1].skill).toBe(2)
+  })
+})

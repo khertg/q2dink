@@ -1,4 +1,4 @@
-import { levelLabel } from '@/lib/skill'
+import { levelLabel, sessionScale } from '@/lib/skill'
 import { playersPerCourt } from '@/rotation/engine'
 import { laneQueue, type LevelRange } from '@/rotation/levels'
 import type { SessionState } from '@/rotation/types'
@@ -13,7 +13,7 @@ export function waitingMessage(session: SessionState, levels?: LevelRange): stri
   const needed = playersPerCourt(session.mode)
   if (levels) {
     const inRange = laneQueue(session, levels, new Set()).length
-    const label = levelLabel(levels)
+    const label = levelLabel(sessionScale(session), levels)
     if (inRange < needed) return `Waiting for ${plural(needed - inRange, 'more player')} at ${label}.`
     return `No group at ${label} can be formed from the players waiting yet.`
   }

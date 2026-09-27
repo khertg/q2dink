@@ -29,11 +29,11 @@ test.describe('live viewer', () => {
     const { club } = await runningClub(request, snapshot)
     await page.goto(`/club/${club.slug}/live`)
 
-    await expect(page.getByRole('region', { name: 'Court 1' }).getByRole('img', { name: 'Skill levels: 3.5+' })).toBeVisible()
-    await expect(page.getByRole('region', { name: 'Court 2' }).getByRole('img', { name: 'Skill levels: 1.0–3.0' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Court 1' }).getByRole('img', { name: 'Skill levels: 3.50+' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Court 2' }).getByRole('img', { name: 'Skill levels: Up to 3.49' })).toBeVisible()
     const nextUp = page.getByRole('group', { name: 'Next up' })
-    await expect(nextUp.getByRole('region', { name: '3.5+' })).toContainText('No group is ready yet.')
-    await expect(nextUp.getByRole('region', { name: '1.0–3.0' })).toBeVisible()
+    await expect(nextUp.getByRole('region', { name: '3.50+' })).toContainText('No group is ready yet.')
+    await expect(nextUp.getByRole('region', { name: 'Up to 3.49' })).toBeVisible()
   })
 
   test('still opens from the older address without /live, and shows the new one', async ({ page, request }) => {
@@ -285,7 +285,7 @@ test.describe('live updates', () => {
       ...snapshot,
       email: 'owner@example.com',
       players: Object.fromEntries(
-        Object.entries(snapshot.players).map(([id, p]) => [id, { ...p, gender: 'F', phone: '555' }]),
+        Object.entries(snapshot.players).map(([id, p]) => [id, { ...p, gender: 'F', phone: 'private-phone-number' }]),
       ),
     }
     await apiPublish(request, token, dirty)
@@ -299,6 +299,7 @@ test.describe('live updates', () => {
 
     // Nor did anything private make it onto the page the player sees.
     await expect(page.getByRole('heading', { name: 'Sunset Courts' })).toBeVisible()
-    expect(await page.content()).not.toMatch(/gender|owner@example|555/)
+    // (A marker that cannot turn up by chance, as digits can in the version label's commit id.)
+    expect(await page.content()).not.toMatch(/gender|owner@example|private-phone-number/)
   })
 })

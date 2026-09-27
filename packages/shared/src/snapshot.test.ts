@@ -102,7 +102,7 @@ describe('parsePublicSnapshot', () => {
       { ...good(), stats: null },
       { ...good(), stats: { 1: { games: -1, wins: 0, losses: 0, opponentSkill: 0 } } },
       { ...good(), stats: { abc: { games: 1, wins: 1, losses: 0, opponentSkill: 1 } } },
-      { ...good(), players: { 1: { id: 1, name: 'A', skill: 9 } } },
+      { ...good(), players: { 1: { id: 1, name: 'A', skill: 11 } } }, // a scale has at most 10 levels
       { ...good(), players: { 1: { id: 1, name: 'A', skill: 2.5 } } },
       { ...good(), players: { 1: { id: 2, name: 'A', skill: 3 } } }, // key and id disagree
       { ...good(), players: { 1: { id: 1, name: 7, skill: 3 } } },
@@ -163,8 +163,8 @@ describe('parsePublicSnapshot', () => {
       expect(parsePublicSnapshot(good())!.courts[0]).not.toHaveProperty('levels')
     })
 
-    it('rejects a range outside 1 to 6 or the wrong way round', () => {
-      for (const levels of [[0, 3], [3, 7], [5, 3], [2.5, 4], [3], '3-4', null]) {
+    it('rejects a range outside 1 to 10 or the wrong way round', () => {
+      for (const levels of [[0, 3], [3, 11], [5, 3], [2.5, 4], [3], '3-4', null]) {
         expect(parsePublicSnapshot(withLevels(levels)), JSON.stringify(levels)).toBeNull()
       }
     })
@@ -281,5 +281,22 @@ describe('session status on the live page', () => {
     const parsed = parsePublicSnapshot({ ...good(), status: 'asleep' })
     expect(parsed).not.toBeNull()
     expect(parsed).not.toHaveProperty('status')
+  })
+})
+
+describe('the session’s skill scale on the public snapshot', () => {
+  const scale = { levels: [{ label: 'Low', from: 1 }, { label: 'Mid', from: 3 }, { label: 'High', from: 4.5, range: '4.50+' }] }
+
+  it('is kept as a clean copy, with players and court ranges up to its number of levels', () => {
+    const parsed = parsePublicSnapshot({ ...good(), skillScale: { ...scale, extra: 1 }, players: { 1: { id: 1, name: 'A', skill: 8 } } })
+    expect(parsed?.skillScale).toEqual(scale)
+    expect(parsed?.players[1].skill).toBe(8)
+  })
+
+  it('is dropped when missing or not valid, and the board is still accepted', () => {
+    expect(parsePublicSnapshot(good())).not.toHaveProperty('skillScale')
+    const bad = parsePublicSnapshot({ ...good(), skillScale: { levels: [{ label: 'Only one', from: 1 }] } })
+    expect(bad).not.toBeNull()
+    expect(bad).not.toHaveProperty('skillScale')
   })
 })

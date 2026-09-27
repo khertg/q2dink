@@ -220,4 +220,19 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    id: '011_skill_scales',
+    sql: `
+      -- Each club chooses its skill levels (null: the default, suggested DUPR ranges).
+      alter table clubs add column skill_scale jsonb;
+      -- Players keep a rating (1.0 to 8.0, DUPR style); a club's scale turns it into a level. The skill column stays for
+      -- older apps: the level 1 to 6 of the rating on the default scale. Saved levels become the rating that keeps
+      -- them at the same level under that scale.
+      alter table club_roster add column rating numeric(4, 3);
+      update club_roster set rating = case skill
+        when 1 then 1 when 2 then 2.5 when 3 then 3 when 4 then 3.5 when 5 then 4 else 4.5 end;
+      alter table club_roster alter column rating set not null;
+      alter table club_roster add constraint club_roster_rating_range check (rating between 1 and 8);
+    `,
+  },
 ]

@@ -290,12 +290,12 @@ test.describe('court layout', () => {
 
 test.describe('skill levels per court', () => {
   const LEVEL = {
-    1: '1 · Beginner (1.0)',
-    2: '2 · Novice (2.0-2.5)',
-    3: '3 · Intermediate (3.0)',
-    4: '4 · Upper Intermediate (3.5)',
-    5: '5 · Advanced (4.0-4.5)',
-    6: '6 · Expert (5.0+)',
+    1: '1 · Beginner (NR / < 2.50)',
+    2: '2 · Novice (2.50–2.99)',
+    3: '3 · Low Intermediate (3.00–3.49)',
+    4: '4 · Intermediate (3.50–3.99)',
+    5: '5 · Advanced (4.00–4.49)',
+    6: '6 · Elite / Pro (4.50+)',
   } as const
 
   /** Set a court's lowest and highest level in Manage courts (the dialog must be open). */
@@ -310,8 +310,8 @@ test.describe('skill levels per court', () => {
   test('each court starts games only from players in its range', async ({ page }) => {
     await startSession(page, { courts: 2 })
     await manage(page)
-    await setLevels(page, 'Court 1', '3.5 · Upper Intermediate', '5.0+ · Expert')
-    await setLevels(page, 'Court 2', '1.0 · Beginner', '3.0 · Intermediate')
+    await setLevels(page, 'Court 1', '3.50–3.99 · Intermediate', '4.50+ · Elite / Pro')
+    await setLevels(page, 'Court 2', 'NR / < 2.50 · Beginner', '3.00–3.49 · Low Intermediate')
     await closeDialog(page)
 
     await checkIn(page, [
@@ -327,15 +327,15 @@ test.describe('skill levels per court', () => {
 
     const court1 = page.getByRole('region', { name: 'Court 1' })
     const court2 = page.getByRole('region', { name: 'Court 2' })
-    await expect(court1.getByRole('img', { name: 'Skill levels: 3.5+' })).toBeVisible()
-    await expect(court2.getByRole('img', { name: 'Skill levels: 1.0–3.0' })).toBeVisible()
+    await expect(court1.getByRole('img', { name: 'Skill levels: 3.50+' })).toBeVisible()
+    await expect(court2.getByRole('img', { name: 'Skill levels: Up to 3.49' })).toBeVisible()
     for (const name of ['Ann', 'Cy', 'Eve', 'Gus']) await expect(court1).toContainText(name)
     for (const name of ['Bob', 'Dee', 'Fay', 'Hal']) await expect(court2).toContainText(name)
 
     // The Next up card lists one group per level.
     const nextUp = page.getByRole('group', { name: 'Next up' })
-    await expect(nextUp.getByRole('region', { name: '3.5+' })).toContainText('Ann')
-    await expect(nextUp.getByRole('region', { name: '1.0–3.0' })).toContainText('Bob')
+    await expect(nextUp.getByRole('region', { name: '3.50+' })).toContainText('Ann')
+    await expect(nextUp.getByRole('region', { name: 'Up to 3.49' })).toContainText('Bob')
 
     await startGame(page, 'Court 2')
     for (const name of ['Bob', 'Dee', 'Fay', 'Hal']) {
@@ -346,7 +346,7 @@ test.describe('skill levels per court', () => {
 
     // The ranges are part of the session: they survive a reload.
     await page.reload()
-    await expect(court1.getByRole('img', { name: 'Skill levels: 3.5+' })).toBeVisible()
+    await expect(court1.getByRole('img', { name: 'Skill levels: 3.50+' })).toBeVisible()
   })
 
   test('a court waits for players in its range, and staff can start it with anyone', async ({ page }) => {
@@ -354,7 +354,7 @@ test.describe('skill levels per court', () => {
     // Every court shows its setting, including one open to everyone.
     await expect(page.getByRole('region', { name: 'Court 1' }).getByRole('img', { name: 'Skill levels: All levels' })).toBeVisible()
     await manage(page)
-    await setLevels(page, 'Court 1', '3.5 · Upper Intermediate', '5.0+ · Expert')
+    await setLevels(page, 'Court 1', '3.50–3.99 · Intermediate', '4.50+ · Elite / Pro')
     await closeDialog(page)
     await checkIn(page, [
       { name: 'Ann', skill: LEVEL[5] },
@@ -364,7 +364,7 @@ test.describe('skill levels per court', () => {
     ])
 
     const court = page.getByRole('region', { name: 'Court 1' })
-    await expect(court).toContainText('Waiting for 2 more players at 3.5+.')
+    await expect(court).toContainText('Waiting for 2 more players at 3.50+.')
     await expect(court.getByRole('button', { name: 'Start game' })).toHaveCount(0)
     await court.getByRole('button', { name: 'Start with waiting players' }).click()
     await expect(court.getByText('In play')).toBeVisible()
@@ -401,9 +401,9 @@ test.describe('the court card menu', () => {
     await courtAction(page, 'Court 2', 'Skill levels…')
     const dialog = page.getByRole('dialog', { name: 'Skill levels for Court 2' })
     await dialog.getByLabel('Lowest level for Court 2').click()
-    await page.getByRole('option', { name: '3.5 · Upper Intermediate', exact: true }).click()
+    await page.getByRole('option', { name: '3.50–3.99 · Intermediate', exact: true }).click()
     await dialog.getByRole('button', { name: 'Done' }).click()
-    await expect(court(page, 'Court 2').getByRole('img', { name: 'Skill levels: 3.5+' })).toBeVisible()
+    await expect(court(page, 'Court 2').getByRole('img', { name: 'Skill levels: 3.50+' })).toBeVisible()
     await expect(court(page, 'Court 1').getByRole('img', { name: 'Skill levels: All levels' })).toBeVisible()
   })
 

@@ -1,3 +1,4 @@
+import type { SkillScale } from '@q2dink/shared'
 import type { Player, SkillLevel } from '../db/db'
 
 /** A player who has been saved to the roster and therefore has an id. */
@@ -165,6 +166,11 @@ export interface SessionState {
    * can set it up first. Missing (a session from before this was chosen) means live.
    */
   live?: boolean
+  /**
+   * The skill levels this session uses (the club's when it was created, or changed since with setSkillScale). Players'
+   * `skill` is their level on it. Missing: the default scale (sessions from before scales existed).
+   */
+  skillScale?: SkillScale
   /** Every game finished this session, oldest first. Missing in sessions saved before this was kept. */
   matches?: MatchRecord[]
   /**

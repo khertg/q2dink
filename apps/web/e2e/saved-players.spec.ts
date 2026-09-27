@@ -53,12 +53,12 @@ test('changes a saved player’s level for the sessions to come', async ({ page 
 
   await savedList(page).getByRole('button', { name: /^Change Cy's level/ }).click()
   await page.getByRole('dialog', { name: "Change Cy's level" }).getByRole('button', { name: /^6 ·/ }).click()
-  await expect(savedList(page).getByRole('button', { name: /^Change Cy's level/ })).toHaveText('Expert')
+  await expect(savedList(page).getByRole('button', { name: /^Change Cy's level/ })).toHaveText('Elite / Pro')
 
   await page.keyboard.press('Escape')
   await startSession(page)
   await page.getByRole('tab', { name: 'Check-in' }).click()
   await rosterCard(page).getByRole('checkbox', { name: /^Cy\b/ }).check()
   await rosterCard(page).getByRole('button', { name: 'Check in 1 player' }).click()
-  await expect(page.getByRole('listitem').filter({ hasText: 'Cy' }).getByText('Expert')).toBeVisible()
+  await expect(page.getByRole('listitem').filter({ hasText: 'Cy' }).getByText('Elite / Pro')).toBeVisible()
 })

@@ -123,3 +123,14 @@ describe('describeAction for the session clock', () => {
     expect(say(paused, { type: 'resume', now: 9 })).toBe('Resumed the session')
   })
 })
+
+describe('describeAction for skill levels', () => {
+  const FOUR = { levels: [{ label: 'Social', from: 1 }, { label: 'Club', from: 3 }, { label: 'Strong', from: 4 }, { label: 'Pro', from: 5 }] }
+
+  it('names the new levels, and names a player’s level on the session’s scale', () => {
+    expect(say(waiting, { type: 'setSkillScale', scale: FOUR })).toBe('Changed the skill levels to 4: Social, Club, Strong, Pro')
+    const custom = apply(waiting, { type: 'setSkillScale', scale: FOUR })
+    expect(say(custom, { type: 'setPlayerSkill', playerId: 1, skill: 4 })).toBe("Changed Ann's level to Pro")
+    expect(say(waiting, { type: 'setPlayerSkill', playerId: 1, skill: 4 })).toBe("Changed Ann's level to Intermediate")
+  })
+})

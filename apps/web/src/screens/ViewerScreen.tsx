@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useClubName } from '@/lib/avatars'
-import { levelLabel } from '@/lib/skill'
+import { levelLabel, sessionScale } from '@/lib/skill'
+import { SkillScaleContext } from '@/lib/skillScaleContext'
 import { playingIds } from '@/rotation/engine'
 import { matchmakingLabel } from '@/lib/matchmaking'
 import { cn } from '@/lib/utils'
@@ -190,7 +191,9 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
   const updated = new Date(updatedAt).toLocaleTimeString()
 
   return (
-    // Bottom padding clears the fixed bottom tab bar (its height plus the home-indicator safe area).
+    // The session's own level names, as staff see them.
+    <SkillScaleContext.Provider value={sessionScale(session)}>
+    {/* Bottom padding clears the fixed bottom tab bar (its height plus the home-indicator safe area). */}
     <div className="space-y-4 pb-[calc(4rem+env(safe-area-inset-bottom))]">
       {lives.length > 1 && <SessionChooser slug={slug} sessions={lives} />}
       <header className="min-w-0">
@@ -253,7 +256,7 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
             emptyMessage="No group is ready yet. Waiting for more players."
             slotsPerTeam={snapshot.mode === 'doubles' ? 2 : 1}
             lanes={snapshot.nextUpLanes?.map((lane) => ({
-              label: levelLabel(lane.levels ?? undefined) ?? 'Any level',
+              label: levelLabel(sessionScale(session), lane.levels ?? undefined) ?? 'Any level',
               nextUp: lane.players,
               emptyMessage: 'No group is ready yet.',
             }))}
@@ -268,5 +271,6 @@ export function ViewerScreen({ slug, sessionId }: { slug: string; sessionId?: st
         </TabsContent>
       </Tabs>
     </div>
+    </SkillScaleContext.Provider>
   )
 }

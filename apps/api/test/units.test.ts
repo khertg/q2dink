@@ -268,6 +268,24 @@ describe('migrations', () => {
     await db.close()
   })
 
+  it('give every saved player the rating that keeps their level under the default scale', async () => {
+    const db = await connectDb('pglite://memory')
+    const before = MIGRATIONS.findIndex((m) => m.id === '011_skill_scales')
+    await migrate(db, MIGRATIONS.slice(0, before))
+    await db.exec(`
+      insert into clubs (slug, name, password_hash, recovery_hash) values ('aaa', 'A', 'x', 'x');
+      insert into club_roster (club_slug, name_key, name, skill) values
+        ('aaa', 'p1', 'P1', 1), ('aaa', 'p2', 'P2', 2), ('aaa', 'p3', 'P3', 3),
+        ('aaa', 'p4', 'P4', 4), ('aaa', 'p5', 'P5', 5), ('aaa', 'p6', 'P6', 6);
+    `)
+    await migrate(db)
+    const { rows } = await db.query<{ skill: number; rating: string }>('select skill, rating from club_roster order by skill')
+    expect(rows.map((r) => [r.skill, Number(r.rating)])).toEqual([[1, 1], [2, 2.5], [3, 3], [4, 3.5], [5, 4], [6, 4.5]])
+    const clubs = await db.query<{ skill_scale: unknown }>('select skill_scale from clubs')
+    expect(clubs.rows).toEqual([{ skill_scale: null }])
+    await db.close()
+  })
+
   it('drop every club logo, since clubs no longer have one', async () => {
     const db = await connectDb('pglite://memory')
     const before = MIGRATIONS.findIndex((m) => m.id === '008_drop_club_logos')

@@ -18,6 +18,7 @@ import {
   type SessionStateRow,
   type SessionsResponse,
   type RosterResponse,
+  type SkillScaleBody,
   type StaffAvatar,
   type StaffAvatarIndex,
 } from '@q2dink/shared'
@@ -156,6 +157,11 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
     async putRoster(token, players) {
       await request('PUT', '/roster', { token, body: { players } })
     },
+
+    fetchSkillScale: async (token) => (await request<SkillScaleBody>('GET', '/skill-scale', { token })).scale,
+
+    putSkillScale: async (token, scale) =>
+      (await request<SkillScaleBody>('PUT', '/skill-scale', { token, body: { scale } })).scale,
 
     async fetchRoster(token) {
       const result = await request<RosterResponse>('GET', '/roster', { token })

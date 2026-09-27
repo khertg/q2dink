@@ -1,3 +1,5 @@
+import { sessionScale } from '@/lib/skill'
+import { SkillScaleContext } from '@/lib/skillScaleContext'
 import { LayoutGridIcon, TrophyIcon, UserPlusIcon } from 'lucide-react'
 import { PausedByDialog, SessionClockBanner, SessionClockButton, SessionStatusBadge } from '@/components/SessionClock'
 import { SessionMenu } from '@/components/SessionMenu'
@@ -21,7 +23,9 @@ export function SessionScreen({ session }: { session: SessionState }) {
   const totalPlayers = session.queue.length + playingIds(session).length + session.onBreak.length
 
   return (
-    // Bottom padding clears the fixed bottom tab bar (its height plus the home-indicator safe area).
+    // Everything inside a session names levels on the session's own scale.
+    <SkillScaleContext.Provider value={sessionScale(session)}>
+    {/* Bottom padding clears the fixed bottom tab bar (its height plus the home-indicator safe area). */}
     <div className="space-y-4 pb-[calc(4rem+env(safe-area-inset-bottom))]">
       <header>
         {/* Only the name shares its row with the buttons: the badges below keep the full width, so the header is
@@ -94,5 +98,6 @@ export function SessionScreen({ session }: { session: SessionState }) {
       </Tabs>
       </SessionClockContext.Provider>
     </div>
+    </SkillScaleContext.Provider>
   )
 }

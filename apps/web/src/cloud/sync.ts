@@ -12,7 +12,17 @@ import {
   mergeClubRoster,
   setClubAvatar,
 } from '@/db/roster'
-import { MAX_ROSTER_BATCH, type ClubSessionSummary, type DeviceSummary, type SessionStateRow, type StaffAvatar } from '@q2dink/shared'
+import {
+  MAX_ROSTER_BATCH,
+  legacyLevelForRating,
+  type ClubSessionSummary,
+  type DeviceSummary,
+  type SessionStateRow,
+  type SkillScale,
+  type StaffAvatar,
+} from '@q2dink/shared'
+import { ratingOf } from '@/lib/skill'
+import { useClubScale } from '@/lib/skillScaleStore'
 import {
   addPendingRename,
   clearPendingRenames,
@@ -231,8 +241,47 @@ async function runSync(api: CloudApi): Promise<void> {
     flushPendingLifetime(api),
     syncHistory(api),
     syncMedia(api),
+    syncSkillScale(api),
     renamed ? exchangeRoster(api) : Promise.resolve(false),
   ])
+}
+
+/**
+ * The club's skill levels: a change made here for this club goes up; otherwise the club's are taken (another staff
+ * device may have changed them). A change made here for another club is dropped by taking this club's. Returns
+ * false when the club could not be reached.
+ */
+export async function syncSkillScale(api: CloudApi | null = cloud): Promise<boolean> {
+  const club = useClubAuth.getState().club
+  if (!api || !club) return false
+  try {
+    const local = useClubScale.getState()
+    if (local.pending && local.clubSlug === club.slug) {
+      const kept = await api.putSkillScale(club.token, local.scale)
+      if (useClubAuth.getState().club?.slug === club.slug) useClubScale.getState().markSent(kept)
+    } else {
+      const scale = await api.fetchSkillScale(club.token)
+      if (useClubAuth.getState().club?.slug === club.slug) useClubScale.getState().takeClub(scale, club.slug)
+    }
+    return true
+  } catch (error) {
+    handleAuthError(error)
+    return false
+  }
+}
+
+/**
+ * Staff chose other skill levels for the club (null: back to the default). Kept here at once, sent to the club (and
+ * so its other devices) now or with the next sync. Sessions already running keep theirs until staff apply the new ones.
+ */
+export function saveClubSkillScale(scale: SkillScale | null, api: CloudApi | null = cloud): void {
+  const slug = useClubAuth.getState().club?.slug
+  useClubScale.getState().setLocal(scale, slug)
+  recordAudit(
+    'skillScale',
+    scale ? `Changed the club’s skill levels to ${scale.levels.map((l) => l.label).join(', ')}` : 'Went back to the default skill levels',
+  )
+  void syncSkillScale(api)
 }
 
 /**
@@ -262,6 +311,7 @@ export async function countUnsent(): Promise<UnsentCounts> {
     leaderboard: useClubAuth.getState().pendingLifetime.filter((p) => p.slug === slug).length,
     avatars,
     photoSharing,
+    skillLevels: useClubScale.getState().pending && useClubScale.getState().clubSlug === slug,
   }
 }
 
@@ -327,7 +377,11 @@ async function exchangeRoster(api: CloudApi): Promise<boolean> {
       const batch = dirty.slice(i, i + MAX_ROSTER_BATCH)
       await api.putRoster(
         club.token,
-        batch.map((p) => ({ name: p.name, skill: p.skill, ...(p.gender ? { gender: p.gender } : {}) })),
+        // The rating decides the level on the club's scale; `skill` is its level on the default scale, for older apps.
+        batch.map((p) => {
+          const rating = ratingOf(p)
+          return { name: p.name, skill: legacyLevelForRating(rating), rating, ...(p.gender ? { gender: p.gender } : {}) }
+        }),
       )
       await markRosterSent(batch)
     }

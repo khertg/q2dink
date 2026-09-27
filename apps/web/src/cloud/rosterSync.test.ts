@@ -21,7 +21,7 @@ import {
   mergeClubRoster,
   renameRosterPlayer,
   setRosterAvatar,
-  setRosterSkill,
+  setRosterRating,
 } from '@/db/roster'
 import { getSharePhotos } from '@/db/settings'
 import { CloudError, type CloudApi } from './api'
@@ -71,11 +71,11 @@ describe('a club roster', () => {
   it('lists only the club’s own players; a name can be saved once per club', async () => {
     await addOrGetPlayer('Ann', 3, undefined, 'downtown')
     await addOrGetPlayer('Bob', 2, undefined, 'downtown')
-    const other = await addOrGetPlayer('ann', 5, undefined, 'uptown')
+    const other = await addOrGetPlayer('ann', 4, undefined, 'uptown')
     expect(await names('downtown')).toEqual(['Ann', 'Bob'])
     expect(await names('uptown')).toEqual(['ann'])
-    expect(other.skill).toBe(5)
-    expect((await addOrGetPlayer('ANN', 5, undefined, 'uptown')).id).toBe(other.id)
+    expect(other).toMatchObject({ rating: 4, skill: 5 })
+    expect((await addOrGetPlayer('ANN', 4, undefined, 'uptown')).id).toBe(other.id)
     expect(await db.players.count()).toBe(3)
   })
 
@@ -110,15 +110,26 @@ describe('mergeClubRoster', () => {
     expect(c).toMatchObject({ name: 'Cy', skill: 4, gender: 'M', clubSlug: 'downtown', rosterDirty: false })
     expect(await names('uptown')).toEqual([])
   })
+
+  it('takes the club’s ratings, and reads a level from an older server as the rating it stands for', async () => {
+    await mergeClubRoster('downtown', [
+      { name: 'Ann', skill: 4, rating: 3.742 },
+      { name: 'Old', skill: 2 },
+    ])
+    const [ann, old] = await listRoster('downtown')
+    expect(ann).toMatchObject({ rating: 3.742, skill: 4 })
+    expect(old).toMatchObject({ rating: 2.5, skill: 2 })
+  })
 })
 
 describe('syncRoster', () => {
   it('takes the players no club had yet, sends them, and marks them sent', async () => {
     await addOrGetPlayer('Ann', 3, 'F')
-    await addOrGetPlayer('Bob', 2)
+    await addOrGetPlayer('Bob', 2.5)
     const { cloudApi, sent } = fakeApi()
     expect(await syncRoster(cloudApi)).toBe(true)
-    expect(sent).toEqual([[{ name: 'Ann', skill: 3, gender: 'F' }, { name: 'Bob', skill: 2 }]])
+    // Each player's rating, and its level on the default scale for the club's older apps.
+    expect(sent).toEqual([[{ name: 'Ann', skill: 3, rating: 3, gender: 'F' }, { name: 'Bob', skill: 2, rating: 2.5 }]])
     expect(await names('downtown')).toEqual(['Ann', 'Bob'])
     expect((await db.players.toArray()).every((p) => p.rosterDirty === false)).toBe(true)
 
@@ -132,9 +143,9 @@ describe('syncRoster', () => {
     const ann = await addOrGetPlayer('Ann', 3, undefined, 'downtown')
     await syncRoster(cloudApi)
     club('tok-1').set('dee', { name: 'Dee', skill: 6 })
-    await setRosterSkill(ann.id, 4)
+    await setRosterRating(ann.id, 3.5)
     await syncRoster(cloudApi)
-    expect(sent.at(-1)).toEqual([{ name: 'Ann', skill: 4 }])
+    expect(sent.at(-1)).toEqual([{ name: 'Ann', skill: 4, rating: 3.5 }])
     expect(await names('downtown')).toEqual(['Ann', 'Dee'])
   })
 
@@ -151,7 +162,7 @@ describe('syncRoster', () => {
 
   it('keeps a player marked when they changed again while being sent', async () => {
     const ann = await addOrGetPlayer('Ann', 3, undefined, 'downtown')
-    const { cloudApi } = fakeApi({ putRoster: () => setRosterSkill(ann.id, 6) })
+    const { cloudApi } = fakeApi({ putRoster: () => setRosterRating(ann.id, 4.5) })
     await syncRoster(cloudApi)
     expect(await db.players.get(ann.id)).toMatchObject({ skill: 6, rosterDirty: true })
   })

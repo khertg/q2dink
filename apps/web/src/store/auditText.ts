@@ -1,5 +1,5 @@
 import type { SkillLevel } from '@/db/db'
-import { levelLabel, skillLabel } from '@/lib/skill'
+import { levelLabel, sessionScale, skillLabel } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
 import type { SessionState } from '@/rotation/types'
 import type { SessionAction } from './actions'
@@ -30,7 +30,11 @@ export function describeAction(before: SessionState, action: SessionAction, afte
     case 'setLive':
       return say(action.live ? 'Went live: players can see the board' : 'Stopped live: the public page shows no game')
     case 'setPlayerSkill':
-      return say(`Changed ${name(action.playerId)}'s level to ${skillLabel(action.skill)}`)
+      return say(`Changed ${name(action.playerId)}'s level to ${skillLabel(sessionScale(before), action.skill)}`)
+    case 'setSkillScale': {
+      const labels = action.scale.levels.map((l) => l.label)
+      return say(`Changed the skill levels to ${labels.length}: ${labels.join(', ')}`)
+    }
     case 'renamePlayer':
       return say(`Renamed ${name(action.playerId)} to ${action.name.trim()}`)
     case 'checkIn': {
@@ -81,7 +85,7 @@ export function describeAction(before: SessionState, action: SessionAction, afte
     case 'setCourtLevels':
       return say(
         action.levels
-          ? `${court(action.courtId)}: kept for ${levelLabel(action.levels as [SkillLevel, SkillLevel]) ?? 'some levels'}`
+          ? `${court(action.courtId)}: kept for ${levelLabel(sessionScale(before), action.levels as [SkillLevel, SkillLevel]) ?? 'some levels'}`
           : `${court(action.courtId)}: open to any level`,
       )
     case 'moveCourt':

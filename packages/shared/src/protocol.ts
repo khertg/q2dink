@@ -1,3 +1,5 @@
+import type { SkillScale } from './skillScale'
+
 /**
  * The HTTP contract between the web app and the API.
  * All routes live under /api and speak JSON. Errors look like
@@ -113,8 +115,13 @@ export const MAX_ROSTER_BATCH = 200
  */
 export interface ClubRosterPlayer {
   name: string
-  /** 1 to 6. */
+  /** The level 1 to 6 on the default scale: what older apps, which know only six levels, read and send. */
   skill: number
+  /**
+   * The player's rating (1.0 to 8.0, DUPR style), which decides their level on any club's scale. Missing from older
+   * apps: the server then takes it from `skill`. Always sent back.
+   */
+  rating?: number
   gender?: 'M' | 'F'
 }
 
@@ -125,6 +132,13 @@ export interface PutRosterRequest {
 
 export interface RosterResponse {
   players: ClubRosterPlayer[]
+}
+
+// ---- skill levels ---------------------------------------------------------------
+
+/** `GET /skill-scale` and the body of `PUT /skill-scale`: the club's skill levels, null for the default scale. */
+export interface SkillScaleBody {
+  scale: SkillScale | null
 }
 
 /** A live session as viewers receive it. */

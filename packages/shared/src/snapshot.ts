@@ -1,4 +1,5 @@
 import { MAX_COURT_NAME_LENGTH, MAX_LOCATION_LENGTH, MAX_PLAYER_NAME_LENGTH } from './protocol'
+import { MAX_SCALE_LEVELS, parseSkillScale, type SkillScale } from './skillScale'
 
 /**
  * Two shapes travel to the API:
@@ -23,7 +24,8 @@ export const SNAPSHOT_LIMITS = {
 
 export type WireGameMode = 'doubles' | 'singles'
 export type WireMatchmaking = 'balanced' | 'skill' | 'winners' | 'mixed'
-export type WireSkill = 1 | 2 | 3 | 4 | 5 | 6
+/** A level on the session's skill scale, 1 (lowest) to the number of levels it has (at most 10; 6 before scales). */
+export type WireSkill = number
 
 export interface WireCourt {
   id: number
@@ -94,6 +96,11 @@ export interface PublicSnapshot {
   partners: [number, number][]
   stats: Record<number, WireStats>
   players: Record<number, WirePlayer>
+  /**
+   * The session's skill levels, so the live page names them as staff do. Missing (older staff apps, or an invalid
+   * one, which is dropped) means the default scale.
+   */
+  skillScale?: SkillScale
 }
 
 export interface FullBackupEnvelope {
@@ -114,7 +121,7 @@ const isIdList = (v: unknown, max: number): v is number[] =>
   Array.isArray(v) && v.length <= max && v.every(isId)
 const isCount = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1_000_000
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max
-const isLevel = (v: unknown) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 6
+const isLevel = (v: unknown) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_SCALE_LEVELS
 const isLevels = (v: unknown): v is [WireSkill, WireSkill] =>
   Array.isArray(v) && v.length === 2 && isLevel(v[0]) && isLevel(v[1]) && v[0] <= v[1]
 
@@ -157,9 +164,7 @@ function validPlayers(v: unknown): v is Record<number, WirePlayer> {
         isId(p.id) &&
         String(p.id) === key &&
         isText(p.name, MAX_PLAYER_NAME_LENGTH) &&
-        Number.isInteger(p.skill) &&
-        (p.skill as number) >= 1 &&
-        (p.skill as number) <= 6,
+        isLevel(p.skill),
     )
   )
 }
@@ -216,6 +221,7 @@ export function parsePublicSnapshot(raw: unknown): PublicSnapshot | null {
 }
 
 function copyPublicSnapshot(s: PublicSnapshot): PublicSnapshot {
+  const scale = s.skillScale === undefined ? null : parseSkillScale(s.skillScale)
   const pick = <T extends object, K extends keyof T>(source: T, keys: K[]) =>
     Object.fromEntries(keys.map((key) => [key, source[key]])) as Pick<T, K>
   return {
@@ -259,6 +265,7 @@ function copyPublicSnapshot(s: PublicSnapshot): PublicSnapshot {
     players: Object.fromEntries(
       Object.entries(s.players).map(([id, p]) => [id, pick(p, ['id', 'name', 'skill'])]),
     ),
+    ...(scale ? { skillScale: scale } : {}),
   }
 }
 

@@ -1,4 +1,5 @@
-import type { AuditEntry } from '@q2dink/shared'
+import { levelForRating, type AuditEntry, type SkillScale } from '@q2dink/shared'
+import { sessionScale } from '@/lib/skill'
 import type { SkillLevel } from '@/db/db'
 import {
   addCourt,
@@ -28,6 +29,7 @@ import {
   setAvgGameMinutes,
   setLive,
   setPlayerSkill,
+  setSkillScale,
   startGame,
   startSessionClock,
   unlockPartners,
@@ -37,8 +39,11 @@ import {
 } from '@/rotation/engine'
 import type { DeviceRef, PausedBy, RosterPlayer, SessionState } from '@/rotation/types'
 
-/** Who to check in: a saved player's details. Their id in the session is chosen when it is applied. */
-export type CheckInPlayer = Pick<RosterPlayer, 'name' | 'skill' | 'gender'>
+/**
+ * Who to check in: a saved player's details. Their id in the session is chosen when it is applied, and so is their
+ * level: the one their rating falls in on the session's scale (older apps send only a level, which is kept).
+ */
+export type CheckInPlayer = Pick<RosterPlayer, 'name' | 'skill' | 'gender' | 'rating'>
 
 /**
  * One change to a running session, as data, so it can be sent after the fact and applied again on the
@@ -48,6 +53,8 @@ export type SessionAction =
   | { type: 'setAvgGameMinutes'; minutes: number }
   | { type: 'setLive'; live: boolean }
   | { type: 'setPlayerSkill'; playerId: number; skill: SkillLevel }
+  /** Use other skill levels for the session (the club's new ones); levels follow the players' ratings. */
+  | { type: 'setSkillScale'; scale: SkillScale }
   | { type: 'renamePlayer'; playerId: number; name: string }
   | { type: 'checkIn'; players: CheckInPlayer[]; now: number }
   | { type: 'checkOut'; playerId: number }
@@ -131,6 +138,8 @@ function applyChange(session: SessionState, action: SessionAction): Applied {
       return { session: setLive(session, action.live) }
     case 'setPlayerSkill':
       return { session: setPlayerSkill(session, action.playerId, action.skill) }
+    case 'setSkillScale':
+      return { session: setSkillScale(session, action.scale) }
     case 'renamePlayer':
       return { session: renamePlayer(session, action.playerId, action.name) }
     case 'checkIn': {
@@ -139,7 +148,9 @@ function applyChange(session: SessionState, action: SessionAction): Applied {
       for (const player of action.players) {
         const id = sessionIdFor(next, player.name)
         ids.push(id)
-        next = checkIn(next, { id, name: player.name.trim(), skill: player.skill, gender: player.gender }, action.now)
+        const skill = player.rating === undefined ? player.skill : levelForRating(sessionScale(next), player.rating)
+        const rating = player.rating === undefined ? {} : { rating: player.rating }
+        next = checkIn(next, { id, name: player.name.trim(), skill, ...rating, gender: player.gender }, action.now)
       }
       return { session: next, ids }
     }

@@ -11,7 +11,8 @@ import {
 } from '@/components/ui/select'
 import { MAX_PLAYER_NAME_LENGTH } from '@q2dink/shared'
 import type { Gender, Player, SkillLevel } from '@/db/db'
-import { DEFAULT_SKILL, SKILL_LEVELS, skillOptionLabel } from '@/lib/skill'
+import { defaultLevel, levelOnScale, levelsOf, ratingForLevel, skillOptionLabel } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 
 /** Select values can't be empty, so "not set" is a sentinel. */
 type GenderChoice = Gender | 'U'
@@ -27,16 +28,26 @@ interface Props {
   roster: Player[] | undefined
   genderRequired: boolean
   submitLabel: string
-  /** Save (and check in) the player. Returns whether the form should be cleared for the next one. */
-  onSubmit: (name: string, skill: SkillLevel, gender: Gender | undefined) => Promise<boolean>
+  /**
+   * Save (and check in) the player, with the rating the chosen level starts at on the scale in use (a returning
+   * player whose level was not changed keeps their own). Returns whether the form should be cleared for the next one.
+   */
+  onSubmit: (name: string, rating: number, gender: Gender | undefined) => Promise<boolean>
 }
 
 /** Name, skill and gender of one player, as used to check someone in or to save them for later. */
 export function AddPlayerForm({ roster, genderRequired, submitLabel, onSubmit }: Props) {
   const id = useId()
+  const scale = useSkillScale()
+  const levels = levelsOf(scale)
   const [name, setName] = useState('')
-  const [skill, setSkill] = useState<SkillLevel>(DEFAULT_SKILL)
+  const [chosenLevel, setSkill] = useState<SkillLevel>(() => defaultLevel(scale))
+  // The scale can change while the form is open (the club's levels arrive, or the session switches): stay on it.
+  const skill = Math.min(chosenLevel, levels.length)
+  // A returning player's own rating, while their level is left as it was.
+  const [knownRating, setKnownRating] = useState<number | null>(null)
   const [gender, setGender] = useState<GenderChoice>('U')
+  const chosen = levels.find((level) => level.value === skill)
 
   const canSubmit = name.trim() !== '' && (!genderRequired || gender !== 'U')
 
@@ -45,17 +56,22 @@ export function AddPlayerForm({ roster, genderRequired, submitLabel, onSubmit }:
     // Returning players (picked from auto-complete) keep their saved details.
     const known = roster?.find((p) => p.name.toLowerCase() === value.trim().toLowerCase())
     if (known) {
-      setSkill(known.skill)
+      setSkill(levelOnScale(scale, known))
+      setKnownRating(known.rating ?? null)
       if (known.gender) setGender(known.gender)
+    } else {
+      setKnownRating(null)
     }
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!canSubmit) return
-    if (await onSubmit(name, skill, gender === 'U' ? undefined : gender)) {
+    const rating = knownRating ?? ratingForLevel(scale, skill)
+    if (await onSubmit(name, rating, gender === 'U' ? undefined : gender)) {
       setName('')
-      setSkill(DEFAULT_SKILL)
+      setSkill(defaultLevel(scale))
+      setKnownRating(null)
       setGender('U')
     }
   }
@@ -78,18 +94,25 @@ export function AddPlayerForm({ roster, genderRequired, submitLabel, onSubmit }:
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${id}-skill`}>Skill level</Label>
-        <Select value={String(skill)} onValueChange={(v) => setSkill(Number(v) as SkillLevel)}>
+        <Select
+          value={String(skill)}
+          onValueChange={(v) => {
+            setSkill(Number(v))
+            setKnownRating(null)
+          }}
+        >
           <SelectTrigger id={`${id}-skill`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SKILL_LEVELS.map((s) => (
+            {levels.map((s) => (
               <SelectItem key={s.value} value={String(s.value)}>
                 {skillOptionLabel(s)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {chosen?.description && <p className="text-xs text-muted-foreground">{chosen.description}</p>}
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${id}-gender`}>

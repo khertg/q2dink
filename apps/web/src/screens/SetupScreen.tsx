@@ -6,6 +6,7 @@ import { OpenSessionsCard } from '@/components/OpenSessionsCard'
 import { LifetimeLeaderboard } from '@/components/LifetimeLeaderboard'
 import { PastSessionsDialog } from '@/components/PastSessionsDialog'
 import { SavedPlayersDialog } from '@/components/SavedPlayersDialog'
+import { SkillScaleDialog } from '@/components/SkillScaleDialog'
 import { ActivityDialog } from '@/components/ActivityDialog'
 import { ResetDeviceDialog } from '@/components/ResetDeviceDialog'
 import { cloud } from '@/cloud/client'
@@ -165,6 +166,7 @@ function SetupCard() {
         </form>
         <div className="mt-2 space-y-1">
           <SavedPlayersDialog />
+          <SkillScaleDialog />
           <PastSessionsDialog />
           <LifetimeLeaderboard />
           <ActivityDialog label="Club activity" />

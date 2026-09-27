@@ -15,7 +15,7 @@ describe('resetDevice', () => {
     await resetDevice({ storage, deleteDatabase })
     expect(deleteDatabase).toHaveBeenCalledOnce()
     expect([...data.keys()]).toEqual(['q2dink-device', 'theme', 'q2dink-card-colors', 'q2dink-install-dismissed'])
-    expect(LOCAL_STORAGE_KEYS_TO_CLEAR).toEqual(['q2dink-session', 'q2dink-club'])
+    expect(LOCAL_STORAGE_KEYS_TO_CLEAR).toEqual(['q2dink-session', 'q2dink-club', 'q2dink-skill-scale'])
   })
 
   it('ends the login on the server first', async () => {
@@ -26,7 +26,7 @@ describe('resetDevice', () => {
       deleteDatabase: async () => void order.push('delete database'),
       logout: async () => void order.push('logout'),
     })
-    expect(order).toEqual(['logout', 'delete database', 'remove q2dink-session', 'remove q2dink-club'])
+    expect(order).toEqual(['logout', 'delete database', 'remove q2dink-session', 'remove q2dink-club', 'remove q2dink-skill-scale'])
   })
 
   it('still resets when the server cannot be reached', async () => {
@@ -74,6 +74,7 @@ describe('unsentChanges', () => {
         leaderboard: 3,
         avatars: 1,
         photoSharing: true,
+        skillLevels: true,
       }),
     ).toEqual([
       '1 change to the running session',
@@ -84,6 +85,7 @@ describe('unsentChanges', () => {
       '3 results for the leaderboard',
       '1 avatar',
       'The player photos switch',
+      'The club’s skill levels',
       '12 activity log entries',
     ])
     expect(unsentChanges({ ...NOTHING_UNSENT, sessionChanges: 3, activity: 1 })).toEqual([

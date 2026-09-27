@@ -1,8 +1,15 @@
-import type { ClubRosterPlayer } from '@q2dink/shared'
+import { legacyLevelForRating, ratingForLegacyLevel, type ClubRosterPlayer } from '@q2dink/shared'
 import type { PlayerAvatar } from '@/lib/avatar'
+import { ratingOf } from '@/lib/skill'
 import { cleanPlayerName } from '@/rotation/engine'
 import type { RosterPlayer } from '@/rotation/types'
-import { db, type Gender, type SkillLevel } from './db'
+import { db, type Gender } from './db'
+
+/**
+ * A saved player keeps a rating (their level on any club's scale comes from it) and, beside it, that rating's level
+ * on the default scale, which is what the club's older apps read.
+ */
+const withRating = (rating: number) => ({ rating, skill: legacyLevelForRating(rating) })
 
 /**
  * Set or remove (null) a saved player's avatar. It is marked as not yet sent to the club, whether
@@ -35,9 +42,9 @@ export async function setClubAvatar(playerId: number, avatar: PlayerAvatar | nul
   })
 }
 
-/** Change a saved player's skill level, so they start future sessions at it. */
-export async function setRosterSkill(playerId: number, skill: SkillLevel): Promise<void> {
-  await db.players.update(playerId, { skill, rosterDirty: true })
+/** Change a saved player's rating (the level they were given), so they start future sessions at it. */
+export async function setRosterRating(playerId: number, rating: number): Promise<void> {
+  await db.players.update(playerId, { ...withRating(rating), rosterDirty: true })
 }
 
 /**
@@ -94,7 +101,7 @@ export async function markRosterSent(sent: RosterPlayer[]): Promise<void> {
   await db.transaction('rw', db.players, async () => {
     for (const s of sent) {
       const now = await db.players.get(s.id)
-      if (now && now.name === s.name && now.skill === s.skill && now.gender === s.gender) {
+      if (now && now.name === s.name && ratingOf(now) === ratingOf(s) && now.gender === s.gender) {
         await db.players.update(s.id, { rosterDirty: false })
       }
     }
@@ -109,12 +116,13 @@ export async function markRosterSent(sent: RosterPlayer[]): Promise<void> {
 export async function mergeClubRoster(clubSlug: string, players: ClubRosterPlayer[]): Promise<void> {
   await db.transaction('rw', db.players, async () => {
     for (const p of players) {
-      const skill = p.skill as SkillLevel
+      // An older server sends only the level: it stands for the rating that keeps it on the default scale.
+      const rating = p.rating ?? ratingForLegacyLevel(p.skill)
       const local = await findByName(clubSlug, p.name)
       if (!local) {
-        await db.players.add({ name: p.name, skill, gender: p.gender, clubSlug, rosterDirty: false })
-      } else if (!local.rosterDirty && (local.skill !== skill || local.gender !== p.gender)) {
-        await db.players.update(local.id!, { skill, gender: p.gender })
+        await db.players.add({ name: p.name, ...withRating(rating), gender: p.gender, clubSlug, rosterDirty: false })
+      } else if (!local.rosterDirty && (ratingOf(local) !== rating || local.gender !== p.gender)) {
+        await db.players.update(local.id!, { ...withRating(rating), gender: p.gender })
       }
     }
   })
@@ -138,32 +146,38 @@ export async function renameRosterPlayer(playerId: number, name: string): Promis
 
 /**
  * Find one of the club's saved players by name (case-insensitive) or create one for that club. An
- * existing player is updated when the skill level, or a newly supplied gender, differs.
+ * existing player is updated when the rating, or a newly supplied gender, differs.
  */
 export async function addOrGetPlayer(
   name: string,
-  skill: SkillLevel,
+  rating: number,
   gender?: Gender,
   clubSlug?: string,
 ): Promise<RosterPlayer> {
   const trimmed = name.trim()
   const existing = await findByName(clubSlug, trimmed)
   if (existing?.id !== undefined) {
-    const changes: { skill?: SkillLevel; gender?: Gender } = {}
-    if (existing.skill !== skill) changes.skill = skill
+    const changes: { rating?: number; skill?: number; gender?: Gender } = {}
+    if (ratingOf(existing) !== rating) Object.assign(changes, withRating(rating))
     if (gender && existing.gender !== gender) changes.gender = gender
     if (Object.keys(changes).length > 0) await db.players.update(existing.id, { ...changes, rosterDirty: true })
     // Only identity fields go into a session; all-time totals stay on the roster.
     return {
       id: existing.id,
       name: existing.name,
-      skill: changes.skill ?? existing.skill,
+      ...withRating(changes.rating ?? ratingOf(existing)),
       gender: changes.gender ?? existing.gender,
     }
   }
-  const id = await db.players.add({ name: trimmed, skill, gender, rosterDirty: true, ...(clubSlug ? { clubSlug } : {}) })
+  const id = await db.players.add({
+    name: trimmed,
+    ...withRating(rating),
+    gender,
+    rosterDirty: true,
+    ...(clubSlug ? { clubSlug } : {}),
+  })
   if (id === undefined) throw new Error('Failed to save player')
-  return { id, name: trimmed, skill, gender }
+  return { id, name: trimmed, ...withRating(rating), gender }
 }
 
 /**
@@ -172,12 +186,12 @@ export async function addOrGetPlayer(
  */
 export async function savePlayer(
   name: string,
-  skill: SkillLevel,
+  rating: number,
   gender?: Gender,
   clubSlug?: string,
 ): Promise<{ player: RosterPlayer; added: boolean }> {
   const known = await findByName(clubSlug, name.trim())
-  const player = await addOrGetPlayer(name, skill, gender, clubSlug)
+  const player = await addOrGetPlayer(name, rating, gender, clubSlug)
   return { player, added: known === undefined }
 }
 

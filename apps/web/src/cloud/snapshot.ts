@@ -58,6 +58,8 @@ export function toPublicSnapshot(location: string, session: SessionState): Publi
     players: Object.fromEntries(
       Object.values(session.players).map((p) => [p.id, { id: p.id, name: p.name, skill: p.skill }]),
     ),
+    // The live page names the levels as staff see them (missing: the default scale).
+    ...(session.skillScale ? { skillScale: session.skillScale } : {}),
   }
 }
 
@@ -78,6 +80,7 @@ export function toViewerState(snapshot: PublicSnapshot): SessionState {
     players: snapshot.players,
     queue: snapshot.queue,
     onBreak: snapshot.onBreak,
+    ...(snapshot.skillScale ? { skillScale: snapshot.skillScale } : {}),
   }
 }
 

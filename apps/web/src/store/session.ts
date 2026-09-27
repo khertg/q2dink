@@ -26,6 +26,9 @@ import type { LifetimeCounts } from '@/rotation/lifetime'
 import { migrateSession, SESSION_STORE_VERSION } from './migrate'
 import { belongsTo, NONE_OPEN, notAppliedAudits, park, unpark, type SessionSlice } from './slices'
 import { deviceRef } from '@/lib/device'
+import { DEFAULT_SCALE, ratingOf } from '@/lib/skill'
+import { clubScaleFor } from '@/lib/skillScaleStore'
+import { sameScale, type SkillScale } from '@q2dink/shared'
 import { useClubAuth } from '@/cloud/auth'
 
 interface SessionStore {
@@ -109,6 +112,8 @@ interface SessionStore {
   /** Rename the running session. Throws a RangeError with a readable message if the name is not allowed. */
   renameSession: (name: string) => void
   setAvgGameMinutes: (minutes: number) => void
+  /** Use other skill levels for the open session (the club's new ones): levels follow the players' ratings. */
+  setSkillScale: (scale: SkillScale) => void
   /** Show the session on the club's public live page, or keep it off it (staff devices share it either way). */
   setLive: (live: boolean) => void
   /** Change a checked-in player's skill level. Future matching follows it; a pending result undo stays. */
@@ -259,7 +264,14 @@ export const useSessionStore = create<SessionStore>()(
             parked: park(state.parked, state, useClubAuth.getState().club?.slug),
             location,
             // Not started (no clock runs) and not on the public live page until staff choose Go live.
-            session: setLiveEngine(markNotStarted(createSession(mode, courtCount, options), now), false),
+            // It keeps the club's skill levels as they are now; a later change is applied to it only when staff choose.
+            session: setLiveEngine(
+              markNotStarted(
+                createSession(mode, courtCount, { ...options, skillScale: ownScale(clubScaleFor(useClubAuth.getState().club?.slug)) }),
+                now,
+              ),
+              false,
+            ),
             previous: null,
             sessionId,
             startedAt: now,
@@ -337,6 +349,8 @@ export const useSessionStore = create<SessionStore>()(
           dispatch({ type: 'setLive', live }, previous && setLiveEngine(previous, live))
         },
 
+        setSkillScale: (scale) => dispatch({ type: 'setSkillScale', scale }, null),
+
         setAvgGameMinutes: (minutes) => {
           const { previous } = get()
           // A setting, not a game event: keep the pending result undo, but carry the
@@ -369,7 +383,13 @@ export const useSessionStore = create<SessionStore>()(
           const session = requireSession(get().session)
           const action: SessionAction = {
             type: 'checkIn',
-            players: players.map(({ name, skill, gender }) => ({ name, skill, ...(gender ? { gender } : {}) })),
+            // The rating decides their level on the session's scale when the check-in is applied.
+            players: players.map((p) => ({
+              name: p.name,
+              skill: p.skill,
+              rating: ratingOf(p),
+              ...(p.gender ? { gender: p.gender } : {}),
+            })),
             now: Date.now(),
           }
           // Players already waiting or playing (matched by name) are not checked in again.
@@ -599,6 +619,12 @@ export const useSessionStore = create<SessionStore>()(
     },
   ),
 )
+
+/**
+ * The scale a new session keeps: none when the club uses the default one, so the session follows the default (and
+ * never offers "new levels" just because the default's wording was improved later).
+ */
+const ownScale = (scale: SkillScale) => (sameScale(scale, DEFAULT_SCALE) ? undefined : scale)
 
 /** Whether the open session (if any) belongs with this club: one owned by another club is never shown or sent. */
 export const openBelongsTo = (clubSlug: string | null | undefined) =>

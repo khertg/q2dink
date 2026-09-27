@@ -8,8 +8,9 @@ import type { Player } from '@/db/db'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { requestRosterSync } from '@/cloud/sync'
-import { setRosterSkill } from '@/db/roster'
-import { skillLabel } from '@/lib/skill'
+import { setRosterRating } from '@/db/roster'
+import { levelOnScale, ratingForLevel, skillLabel } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 import { activeIds } from '@/rotation/engine'
 import type { RosterPlayer, SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
@@ -28,6 +29,8 @@ const plural = (count: number) => `${count} player${count === 1 ? '' : 's'}`
  */
 export function RosterCheckIn({ session, roster }: Props) {
   const checkInPlayers = useSessionStore((s) => s.checkInPlayers)
+  // Inside a session: its own scale, so each saved player shows the level they would check in at.
+  const scale = useSkillScale()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<number[]>([])
 
@@ -56,7 +59,7 @@ export function RosterCheckIn({ session, roster }: Props) {
   function handleCheckIn() {
     const players: RosterPlayer[] = chosen.flatMap((id) => {
       const p = available.find((x) => x.id === id)
-      return p ? [{ id, name: p.name, skill: p.skill, gender: p.gender }] : []
+      return p ? [{ id, name: p.name, skill: p.skill, rating: p.rating, gender: p.gender }] : []
     })
     const added = checkInPlayers(players)
     toast(added === 0 ? 'Everyone ticked was already checked in' : `${plural(added)} checked in`)
@@ -138,10 +141,10 @@ export function RosterCheckIn({ session, roster }: Props) {
                       <span className="min-w-0 flex-1 truncate">{p.name}</span>
                       {blocked && <span className="text-xs text-muted-foreground">Set gender first</span>}
                       <SkillBadge
-                        player={p}
+                        player={{ name: p.name, skill: levelOnScale(scale, p) }}
                         onChange={(skill) => {
-                          void setRosterSkill(id, skill).then(() => requestRosterSync())
-                          toast(`${p.name} is now ${skillLabel(skill)}`)
+                          void setRosterRating(id, ratingForLevel(scale, skill)).then(() => requestRosterSync())
+                          toast(`${p.name} is now ${skillLabel(scale, skill)}`)
                         }}
                       />
                     </label>

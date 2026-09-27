@@ -253,18 +253,18 @@ test('saves the chosen skill level', async ({ page }) => {
   await expect(page.getByRole('listitem').filter({ hasText: 'Zed' }).getByText('Advanced')).toBeVisible()
 })
 
-test('offers the six skill levels with their official ratings', async ({ page }) => {
+test('offers the six default skill levels with their suggested DUPR ranges', async ({ page }) => {
   await startSession(page)
   await page.getByRole('tab', { name: 'Check-in' }).click()
   await page.getByLabel('Skill level').click()
   const options = page.getByRole('option')
   await expect(options).toHaveText([
-    '1 · Beginner (1.0)',
-    '2 · Novice (2.0-2.5)',
-    '3 · Intermediate (3.0)',
-    '4 · Upper Intermediate (3.5)',
-    '5 · Advanced (4.0-4.5)',
-    '6 · Expert (5.0+)',
+    '1 · Beginner (NR / < 2.50)',
+    '2 · Novice (2.50–2.99)',
+    '3 · Low Intermediate (3.00–3.49)',
+    '4 · Intermediate (3.50–3.99)',
+    '5 · Advanced (4.00–4.49)',
+    '6 · Elite / Pro (4.50+)',
   ])
   await expect(page.getByText('Advanced Beginner')).toHaveCount(0)
 })

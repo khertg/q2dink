@@ -38,7 +38,7 @@ describe('roster avatars', () => {
   })
 
   it('belong to one player only, and keep skill, gender and all-time totals', async () => {
-    const ann = await addOrGetPlayer('Ann', 5, 'F')
+    const ann = await addOrGetPlayer('Ann', 4, 'F')
     const bob = await addOrGetPlayer('Bob', 3)
     await db.players.update(ann.id, { games: 4, wins: 3, losses: 1 })
     await setRosterAvatar(ann.id, EMOJI)
@@ -50,7 +50,7 @@ describe('roster avatars', () => {
     const ann = await addOrGetPlayer('Ann', 3)
     await setRosterAvatar(ann.id, PHOTO)
     const again = await addOrGetPlayer('ann', 3)
-    expect(Object.keys(again).sort()).toEqual(['gender', 'id', 'name', 'skill'])
+    expect(Object.keys(again).sort()).toEqual(['gender', 'id', 'name', 'rating', 'skill'])
   })
 
   it('can all be marked as not sent for one club, but only the photos', async () => {

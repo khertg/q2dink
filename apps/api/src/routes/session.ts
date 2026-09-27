@@ -15,6 +15,7 @@ import {
   type RosterResponse,
   type SessionStateRow,
   type SessionsResponse,
+  type SkillScaleBody,
 } from '@q2dink/shared'
 import type { FastifyInstance } from 'fastify'
 import type { RouteDeps } from '../app'
@@ -32,6 +33,7 @@ import {
 import { recordLifetime, MAX_PLAYERS_PER_BATCH } from '../services/lifetime'
 import { renamePlayer } from '../services/players'
 import { getRoster, putRoster } from '../services/roster'
+import { getSkillScale, setSkillScale } from '../services/skillScale'
 import {
   clearSession,
   dropPresence,
@@ -110,11 +112,20 @@ const rosterBody = {
         properties: {
           name: { type: 'string', maxLength: 200 },
           skill: { type: 'integer', minimum: 1, maximum: 6 },
+          rating: { type: 'number', minimum: 1, maximum: 8 },
           gender: { type: 'string', enum: ['M', 'F'] },
         },
       },
     },
   },
+} as const
+
+// The scale itself is checked by the shared parser (levels in order, bounds going up); this only sets its outline.
+const skillScaleBody = {
+  type: 'object',
+  required: ['scale'],
+  additionalProperties: false,
+  properties: { scale: { type: ['object', 'null'] } },
 } as const
 
 const lifetimeBody = {
@@ -289,6 +300,21 @@ export function registerSessionRoutes(api: FastifyInstance, { db, config, hub }:
     const { slug } = await authenticate(db, request)
     return { players: await getRoster(db, slug) }
   })
+
+  // The club's skill levels (null: the default scale), shared by all its staff devices.
+  api.get('/skill-scale', async (request): Promise<SkillScaleBody> => {
+    const { slug } = await authenticate(db, request)
+    return { scale: await getSkillScale(db, slug) }
+  })
+
+  api.put<{ Body: SkillScaleBody }>(
+    '/skill-scale',
+    { config: write, schema: { body: skillScaleBody } },
+    async (request): Promise<SkillScaleBody> => {
+      const { slug } = await authenticate(db, request)
+      return { scale: await setSkillScale(db, slug, request.body.scale) }
+    },
+  )
 
   // Ended sessions, kept so the club can look back at them and resume one from any staff device.
   api.put<{ Params: { id: string }; Body: PutHistoryRequest }>(

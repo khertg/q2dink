@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import type { SkillLevel } from '@/db/db'
-import { countBySkill, SKILL_LEVELS } from '@/lib/skill'
+import { countBySkill, levelsOf } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 
 interface Props {
   ids: readonly number[]
@@ -11,12 +12,13 @@ interface Props {
 
 /** How many players there are at each level, as "Lv 3 · 4" pills. Levels with nobody are left out. */
 export function SkillCountPills({ ids, players, label }: Props) {
-  const counts = countBySkill(ids, players)
+  const scale = useSkillScale()
+  const counts = countBySkill(scale, ids, players)
   if (counts.length === 0) return null
   return (
     <ul aria-label={label} className="flex flex-wrap gap-1">
       {counts.map(({ level, count }) => {
-        const info = SKILL_LEVELS.find((s) => s.value === level)
+        const info = levelsOf(scale).find((s) => s.value === level)
         const description = `${info?.label} (${info?.rating}): ${count} ${count === 1 ? 'player' : 'players'}`
         return (
           <li key={level}>

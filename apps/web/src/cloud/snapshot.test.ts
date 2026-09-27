@@ -92,7 +92,7 @@ describe('public snapshot', () => {
       { ...good, location: 42 },
       { ...good, courts: [{ id: 1, teams: [[1], 'x'] }] },
       { ...good, queue: ['a'] },
-      { ...good, players: { 1: { id: 1, name: 'A', skill: 9 } } },
+      { ...good, players: { 1: { id: 1, name: 'A', skill: 11 } } },
       { ...good, stats: null },
     ]
     for (const value of bad) expect(parsePublicSnapshot(value)).toBeNull()

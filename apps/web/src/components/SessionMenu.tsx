@@ -1,5 +1,15 @@
-import { MAX_LOCATION_LENGTH } from '@q2dink/shared'
-import { DoorOpenIcon, HistoryIcon, LogOutIcon, MoreVerticalIcon, PencilIcon, QrCodeIcon, RadioIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { MAX_LOCATION_LENGTH, sameScale } from '@q2dink/shared'
+import {
+  DoorOpenIcon,
+  GaugeIcon,
+  HistoryIcon,
+  LogOutIcon,
+  MoreVerticalIcon,
+  PencilIcon,
+  QrCodeIcon,
+  RadioIcon,
+  SlidersHorizontalIcon,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useClubAuth } from '@/cloud/auth'
@@ -12,6 +22,8 @@ import { RenameDialog } from '@/components/RenameDialog'
 import { SharePanel } from '@/components/SharePanel'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { sessionScale } from '@/lib/skill'
+import { useClubSkillScale } from '@/lib/skillScaleStore'
 import { isLive, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
@@ -25,6 +37,10 @@ export function SessionMenu({ session }: { session: SessionState }) {
   const location = useSessionStore((s) => s.location)
   const sessionId = useSessionStore((s) => s.sessionId)
   const setLive = useSessionStore((s) => s.setLive)
+  const setSkillScale = useSessionStore((s) => s.setSkillScale)
+  const clubScale = useClubSkillScale()
+  // The club changed its skill levels after this session was created: staff choose when it follows.
+  const newLevels = !sameScale(sessionScale(session), clubScale)
   const live = isLive(session)
   const notStarted = sessionStatus(session) === 'notStarted'
 
@@ -74,6 +90,21 @@ export function SessionMenu({ session }: { session: SessionState }) {
               <SlidersHorizontalIcon aria-hidden="true" /> Manage courts
             </Button>
           </PopoverClose>
+          {newLevels && (
+            <PopoverClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-h-9 w-full justify-start whitespace-normal text-left"
+                onClick={() => {
+                  setSkillScale(clubScale)
+                  toast('The session now uses the club’s skill levels. Each player’s level follows their rating.')
+                }}
+              >
+                <GaugeIcon aria-hidden="true" /> Use the club’s new levels
+              </Button>
+            </PopoverClose>
+          )}
           {club && (
             <PopoverClose asChild>
               <Button

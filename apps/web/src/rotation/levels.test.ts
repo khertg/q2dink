@@ -45,7 +45,7 @@ describe('setCourtLevels', () => {
     expect(() => setCourtLevels(s, 1, [5, 3])).toThrow(RangeError)
     expect(() => setCourtLevels(s, 1, [0, 3])).toThrow(RangeError)
     expect(() => setCourtLevels(s, 1, [3, 7])).toThrow(RangeError)
-    expect(() => normalizeLevels([2.5, 3])).toThrow(RangeError)
+    expect(() => normalizeLevels([2.5, 3], 6)).toThrow(RangeError)
   })
 
   it('keeps the range after a game on the court', () => {

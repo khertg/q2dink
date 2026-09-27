@@ -7,7 +7,7 @@
  */
 
 /** The app's data in localStorage: the running session and the club login. */
-export const LOCAL_STORAGE_KEYS_TO_CLEAR = ['q2dink-session', 'q2dink-club'] as const
+export const LOCAL_STORAGE_KEYS_TO_CLEAR = ['q2dink-session', 'q2dink-club', 'q2dink-skill-scale'] as const
 
 /** What this device has that the club has not been sent yet, and would be lost by a reset. */
 export interface UnsentCounts {
@@ -20,6 +20,8 @@ export interface UnsentCounts {
   leaderboard: number
   avatars: number
   photoSharing: boolean
+  /** The club's skill levels were changed here and not sent yet. */
+  skillLevels: boolean
 }
 
 export const NOTHING_UNSENT: UnsentCounts = {
@@ -32,6 +34,7 @@ export const NOTHING_UNSENT: UnsentCounts = {
   leaderboard: 0,
   avatars: 0,
   photoSharing: false,
+  skillLevels: false,
 }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -47,6 +50,7 @@ export function unsentChanges(c: UnsentCounts): string[] {
     c.leaderboard > 0 && count(c.leaderboard, 'result for the leaderboard', 'results for the leaderboard'),
     c.avatars > 0 && count(c.avatars, 'avatar', 'avatars'),
     c.photoSharing && 'The player photos switch',
+    c.skillLevels && 'The club’s skill levels',
     c.activity > 0 && count(c.activity, 'activity log entry', 'activity log entries'),
   ].filter((line): line is string => typeof line === 'string')
 }

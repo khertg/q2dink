@@ -16,8 +16,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import type { Gender, SkillLevel } from '@/db/db'
-import { listRoster, savePlayer, setRosterSkill } from '@/db/roster'
-import { skillLabel } from '@/lib/skill'
+import { listRoster, savePlayer, setRosterRating } from '@/db/roster'
+import { levelForRating, levelOnScale, ratingForLevel, skillLabel } from '@/lib/skill'
+import { useSkillScale } from '@/lib/skillScaleContext'
 
 /**
  * The club's saved players, and a way to add more before any session has started. Saving only puts
@@ -26,22 +27,24 @@ import { skillLabel } from '@/lib/skill'
 export function SavedPlayersDialog() {
   const clubSlug = useClubAuth((s) => s.club?.slug)
   const roster = useLiveQuery(() => listRoster(clubSlug), [clubSlug])
+  // Saved players are shown on the club's scale.
+  const scale = useSkillScale()
 
-  async function handleAdd(name: string, skill: SkillLevel, gender: Gender | undefined) {
-    const { player, added } = await savePlayer(name, skill, gender, clubSlug)
+  async function handleAdd(name: string, rating: number, gender: Gender | undefined) {
+    const { player, added } = await savePlayer(name, rating, gender, clubSlug)
     requestRosterSync()
     recordAudit(
       added ? 'rosterAdd' : 'rosterUpdate',
-      `${added ? 'Saved' : 'Updated'} player ${player.name} (${skillLabel(player.skill)})`,
+      `${added ? 'Saved' : 'Updated'} player ${player.name} (${skillLabel(scale, levelForRating(scale, rating))})`,
     )
     toast(added ? `${player.name} saved` : `${player.name} is already saved`)
     return true
   }
 
   async function changeSkill(id: number, name: string, skill: SkillLevel) {
-    await setRosterSkill(id, skill)
+    await setRosterRating(id, ratingForLevel(scale, skill))
     requestRosterSync()
-    recordAudit('rosterSkill', `Changed saved player ${name}'s level to ${skillLabel(skill)}`)
+    recordAudit('rosterSkill', `Changed saved player ${name}'s level to ${skillLabel(scale, skill)}`)
   }
 
   return (
@@ -71,7 +74,11 @@ export function SavedPlayersDialog() {
                   <PlayerAvatar name={p.name} editable />
                   <span className="min-w-0 truncate">{p.name}</span>
                 </span>
-                <SkillBadge player={p} display="name" onChange={(skill) => void changeSkill(p.id!, p.name, skill)} />
+                <SkillBadge
+                  player={{ name: p.name, skill: levelOnScale(scale, p) }}
+                  display="name"
+                  onChange={(skill) => void changeSkill(p.id!, p.name, skill)}
+                />
               </li>
             ))}
           </ul>

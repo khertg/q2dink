@@ -1,3 +1,5 @@
+import { SkillScaleContext } from '@/lib/skillScaleContext'
+import { useClubSkillScale } from '@/lib/skillScaleStore'
 import { useEffect, useSyncExternalStore } from 'react'
 import { clubSlugFromPath, liveSessionIdFromPath } from '@q2dink/shared'
 import { useClubAuth } from '@/cloud/auth'
@@ -28,6 +30,7 @@ const subscribeOnline = (onChange: () => void) => {
 
 export default function App() {
   const session = useSessionStore((s) => s.session)
+  const clubScale = useClubSkillScale()
   const signedIn = useClubAuth((s) => s.club !== null)
   const clubSlug = useClubAuth((s) => s.club?.slug ?? null)
   const namedFor = useDevice((s) => s.namedFor)
@@ -51,6 +54,8 @@ export default function App() {
     // Extra bottom padding lets the last controls scroll clear of the toasts pinned to the screen bottom.
     // Screens with their own fixed bottom tab bar (SessionScreen, ViewerScreen) add further clearance themselves.
     <AvatarProvider viewerSlug={isViewerPath ? (viewerSlug ?? undefined) : undefined}>
+    {/* Outside a session, levels are named on the club's scale (a session and the live page set their own). */}
+    <SkillScaleContext.Provider value={clubScale}>
     <NavBar />
     <main className="mx-auto max-w-5xl p-4 pb-24 sm:p-6 sm:pb-24">
       {/* Staff only: the manifest starts at "/", so installing from the viewer would open the staff app. */}
@@ -75,6 +80,7 @@ export default function App() {
       <RecoveryCodeHost />
       <Toaster />
     </main>
+    </SkillScaleContext.Provider>
     </AvatarProvider>
   )
 }

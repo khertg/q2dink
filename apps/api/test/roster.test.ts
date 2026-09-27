@@ -41,9 +41,10 @@ describe('the club roster', () => {
       { name: ' Ann ', skill: 4, gender: 'F' },
     ])
     expect(response.statusCode).toBe(204)
+    // An older app sends only a level: it is kept as the rating that level starts at on the default scale.
     expect(await roster(token)).toEqual([
-      { name: 'Ann', skill: 4, gender: 'F' },
-      { name: 'Bob', skill: 2 },
+      { name: 'Ann', skill: 4, rating: 3.5, gender: 'F' },
+      { name: 'Bob', skill: 2, rating: 2.5 },
     ])
   })
 
@@ -51,7 +52,7 @@ describe('the club roster', () => {
     const { token } = await createClub(app)
     await put(token, [{ name: 'Ann', skill: 3, gender: 'F' }])
     await put(token, [{ name: 'ANN', skill: 5 }])
-    expect(await roster(token)).toEqual([{ name: 'ANN', skill: 5 }])
+    expect(await roster(token)).toEqual([{ name: 'ANN', skill: 5, rating: 4 }])
   })
 
   it('refuses players it cannot store', async () => {
@@ -61,6 +62,8 @@ describe('the club roster', () => {
       [{ name: 'Ann', skill: 7 }],
       [{ name: 'Ann', skill: 2.5 }],
       [{ name: 'Ann', skill: 3, gender: 'X' }],
+      [{ name: 'Ann', skill: 3, rating: 0.5 }],
+      [{ name: 'Ann', skill: 3, rating: 8.5 }],
       [{ name: 'Ann', skill: 3, extra: true }],
       [{ name: '   ', skill: 3 }],
       [{ name: 'x'.repeat(81), skill: 3 }],
@@ -100,8 +103,65 @@ describe('the club roster', () => {
     expect((await rename(token, 'Bob', 'Cy')).statusCode).toBe(204)
     expect((await rename(token, 'cy', 'CY')).statusCode).toBe(204)
     expect(await roster(token)).toEqual([
-      { name: 'Anne', skill: 3 },
-      { name: 'CY', skill: 5 },
+      { name: 'Anne', skill: 3, rating: 3 },
+      { name: 'CY', skill: 5, rating: 4 },
     ])
+  })
+})
+
+describe('ratings on the club roster', () => {
+  it('keeps the rating a newer app sends, with its level on the default scale for older apps', async () => {
+    const { token } = await createClub(app)
+    await put(token, [{ name: 'Ann', skill: 1, rating: 3.742 }])
+    expect(await roster(token)).toEqual([{ name: 'Ann', skill: 4, rating: 3.742 }])
+  })
+
+  it('keeps a rating to three decimals', async () => {
+    const { token } = await createClub(app)
+    await put(token, [{ name: 'Ann', skill: 3, rating: 3.3333 }])
+    expect(await roster(token)).toEqual([{ name: 'Ann', skill: 3, rating: 3.333 }])
+  })
+
+  it('keeps the rating when an older app sends the same level again, and replaces it when the level changes', async () => {
+    const { token } = await createClub(app)
+    await put(token, [{ name: 'Ann', skill: 4, rating: 3.742 }])
+    await put(token, [{ name: 'Ann', skill: 4 }])
+    expect(await roster(token)).toEqual([{ name: 'Ann', skill: 4, rating: 3.742 }])
+    await put(token, [{ name: 'Ann', skill: 2 }])
+    expect(await roster(token)).toEqual([{ name: 'Ann', skill: 2, rating: 2.5 }])
+  })
+})
+
+describe('the club’s skill levels', () => {
+  const scale = { levels: [{ label: 'Social', from: 1 }, { label: 'Club', from: 3, range: '3.0+' }, { label: 'Pro', from: 4.5 }] }
+  const getScale = (token: string | null) =>
+    app.inject({ method: 'GET', url: '/api/skill-scale', headers: token ? bearer(token) : {} })
+  const putScale = (token: string | null, body: unknown) =>
+    app.inject({ method: 'PUT', url: '/api/skill-scale', headers: token ? bearer(token) : {}, payload: body as object })
+
+  it('needs a staff login', async () => {
+    expect((await getScale(null)).statusCode).toBe(401)
+    expect((await putScale(null, { scale })).statusCode).toBe(401)
+  })
+
+  it('is the default (null) until set, then what was set, and can go back to the default', async () => {
+    const { token } = await createClub(app)
+    expect((await getScale(token)).json()).toEqual({ scale: null })
+    const saved = await putScale(token, { scale: { ...scale, extra: true } })
+    expect(saved.statusCode).toBe(200)
+    expect(saved.json()).toEqual({ scale })
+    expect((await getScale(token)).json()).toEqual({ scale })
+    await putScale(token, { scale: null })
+    expect((await getScale(token)).json()).toEqual({ scale: null })
+  })
+
+  it('refuses a scale that is not valid, and never shows one club another’s', async () => {
+    const a = await createClub(app)
+    const b = await createClub(app)
+    expect((await putScale(a.token, { scale: { levels: [{ label: 'One', from: 1 }] } })).statusCode).toBe(400)
+    expect((await putScale(a.token, { scale: { levels: [{ label: 'A', from: 3 }, { label: 'B', from: 2 }] } })).statusCode).toBe(400)
+    expect((await putScale(a.token, {})).statusCode).toBe(400)
+    await putScale(a.token, { scale })
+    expect((await getScale(b.token)).json()).toEqual({ scale: null })
   })
 })
