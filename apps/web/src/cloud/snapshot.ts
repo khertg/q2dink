@@ -4,7 +4,7 @@ import {
   parsePublicSnapshot,
   type PublicSnapshot,
 } from '@q2dink/shared'
-import { nextGroups } from '@/rotation/engine'
+import { nextGroups, sessionStatus } from '@/rotation/engine'
 import { hasLevelCourts } from '@/rotation/levels'
 import type { LifetimeCounts } from '@/rotation/lifetime'
 import type { SessionState } from '@/rotation/types'
@@ -33,6 +33,7 @@ export interface FullBackup {
 
 export function toPublicSnapshot(location: string, session: SessionState): PublicSnapshot {
   const lanes = nextGroups(session)
+  const status = sessionStatus(session)
   return {
     schemaVersion: SNAPSHOT_VERSION,
     location,
@@ -49,6 +50,8 @@ export function toPublicSnapshot(location: string, session: SessionState): Publi
     ...(hasLevelCourts(session)
       ? { nextUpLanes: lanes.map((lane) => ({ levels: lane.levels ?? null, players: lane.group?.players ?? [] })) }
       : {}),
+    // Viewers can say the session is paused (never who paused it: device names are staff only).
+    ...(status === 'running' ? {} : { status }),
     onBreak: session.onBreak,
     partners: session.partners,
     stats: session.stats,

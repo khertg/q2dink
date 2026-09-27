@@ -363,12 +363,14 @@ describe('several staff devices running one session', () => {
     expect((await state(token)).json().full.location).toBe('Moved On')
   })
 
-  it('refuses to start over another running session, or to bring back one that ended', async () => {
+  it('runs another session beside a running one, but never brings back one that ended', async () => {
     const { token } = await createClub(app)
     await write(token, { baseRevision: 0, sessionId: A })
-    const other = await write(token, { baseRevision: 0, sessionId: B })
-    expect(other.statusCode).toBe(409)
-    expect(other.json().current.sessionId).toBe(A)
+    const other = await write(token, { baseRevision: 0, sessionId: B }, 'Evening')
+    expect(other.statusCode).toBe(200)
+    expect(other.json().revision).toBe(1)
+    expect((await app.inject({ method: 'GET', url: `/api/session/state?sessionId=${A}`, headers: bearer(token) })).json())
+      .toMatchObject({ sessionId: A, revision: 1, full: { location: 'Sunset Courts' } })
 
     await app.inject({ method: 'DELETE', url: `/api/session?sessionId=${A}`, headers: bearer(token) })
     const revived = await write(token, { baseRevision: 3, sessionId: A })
@@ -410,5 +412,80 @@ describe('several staff devices running one session', () => {
     expect((await write(token, { baseRevision: 0, sessionId: 'nope' })).statusCode).toBe(400)
     expect((await write(token, { baseRevision: 0, startedAt: 'someday' })).statusCode).toBe(400)
     expect((await write(token, { baseRevision: -1 })).statusCode).toBe(400)
+  })
+})
+
+
+describe('several sessions at once', () => {
+  const A = '00000000-0000-4000-8000-00000000000a'
+  const B = '00000000-0000-4000-8000-00000000000b'
+  const backupWith = (location: string, session: object) => ({ ...sampleBackup(location), session: { ...sampleBackup(location).session, ...session } })
+  const write = (token: string, sessionId: string, location: string, extra: object = {}, session: object = {}) =>
+    put(token, { public: sampleSnapshot(location), full: backupWith(location, session), sessionId, ...extra })
+  const sessions = async (token: string) =>
+    (await app.inject({ method: 'GET', url: '/api/sessions', headers: bearer(token) })).json().sessions
+  const presence = (token: string, id: string, deviceId: string, method: 'PUT' | 'DELETE' = 'PUT') =>
+    app.inject(
+      method === 'PUT'
+        ? { method, url: `/api/sessions/${id}/presence`, headers: bearer(token), payload: { deviceId } }
+        : { method, url: `/api/sessions/${id}/presence?deviceId=${deviceId}`, headers: bearer(token) },
+    )
+
+  it('keeps each session’s revision and conflicts apart', async () => {
+    const { token } = await createClub(app)
+    await write(token, A, 'Morning', { baseRevision: 0 })
+    await write(token, B, 'Evening', { baseRevision: 0 })
+    expect((await write(token, A, 'Morning 2', { baseRevision: 1 })).json().revision).toBe(2)
+    const stale = await write(token, B, 'Stale', { baseRevision: 2 })
+    expect(stale.statusCode).toBe(409)
+    expect(stale.json().current).toMatchObject({ sessionId: B, revision: 1 })
+  })
+
+  it('lists them for staff with their state, players and who paused one', async () => {
+    const { token } = await createClub(app)
+    await write(token, A, 'Morning', { live: false }, { notStarted: true, clockStoppedAt: 1 })
+    await write(token, B, 'Evening', {}, { clockStoppedAt: 5, pausedBy: { deviceId: 'd1', name: 'Desk' }, queue: [1, 2], onBreak: [3] })
+    const list = await sessions(token)
+    expect(list.map((s: { location: string }) => s.location)).toEqual(['Evening', 'Morning'])
+    expect(list[0]).toMatchObject({ sessionId: B, status: 'paused', live: true, pausedBy: { deviceId: 'd1', name: 'Desk' }, openOn: [] })
+    expect(list[1]).toMatchObject({ sessionId: A, status: 'notStarted', live: false })
+    expect(list[0].players).toBe(3)
+    expect((await app.inject({ method: 'GET', url: '/api/sessions' })).statusCode).toBe(401)
+  })
+
+  it('says which staff devices have a session open, by the name the club gave them', async () => {
+    const { token } = await createClub(app)
+    await write(token, A, 'Morning')
+    await app.inject({ method: 'PUT', url: '/api/devices/me', headers: bearer(token), payload: { id: 'd1', name: 'Desk', label: 'Pixel' } })
+    expect((await presence(token, A, 'd1')).statusCode).toBe(204)
+    await presence(token, A, 'd2')
+    const [open] = await sessions(token)
+    expect(open.openOn).toEqual(expect.arrayContaining([{ deviceId: 'd1', name: 'Desk' }, { deviceId: 'd2', name: 'Another device' }]))
+    expect(open.openOn).toHaveLength(2)
+    await presence(token, A, 'd2', 'DELETE')
+    expect((await sessions(token))[0].openOn.map((d: { deviceId: string }) => d.deviceId)).toEqual(['d1'])
+    expect((await presence(token, 'nope', 'd1')).statusCode).toBe(400)
+  })
+
+  it('shows each live session on its own board, and the latest on the club’s', async () => {
+    const { token, slug } = await createClub(app)
+    await write(token, A, 'Morning')
+    await write(token, B, 'Evening')
+    const one = await app.inject({ method: 'GET', url: `/api/clubs/${slug}/live/${A}` })
+    expect(one.json()).toMatchObject({ sessionId: A, state: { location: 'Morning' } })
+    expect((await live(slug)).json().state.location).toBe('Evening')
+    const lives = (await app.inject({ method: 'GET', url: `/api/clubs/${slug}/lives` })).json().sessions
+    expect(lives.map((s: { sessionId: string }) => s.sessionId)).toEqual([B, A])
+    expect((await app.inject({ method: 'GET', url: `/api/clubs/${slug}/live/not-a-session` })).statusCode).toBe(404)
+  })
+
+  it('ends one session and leaves the others running', async () => {
+    const { token, slug } = await createClub(app)
+    await write(token, A, 'Morning')
+    await write(token, B, 'Evening')
+    await app.inject({ method: 'DELETE', url: `/api/session?sessionId=${B}`, headers: bearer(token) })
+    expect((await sessions(token)).map((s: { sessionId: string }) => s.sessionId)).toEqual([A])
+    expect((await live(slug)).json().state.location).toBe('Morning')
+    expect((await app.inject({ method: 'GET', url: `/api/clubs/${slug}/live/${B}` })).statusCode).toBe(404)
   })
 })

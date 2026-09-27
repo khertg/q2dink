@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { failOnCspViolations } from '../cspWatch'
-import { checkIn, openSessionMenu, recordWin, startGame, startSession } from '../helpers'
+import { checkIn, openFromList, openSessionMenu, openSessionsList, recordWin, startGame, startSession } from '../helpers'
 import { apiCreateClub, expectSignedIn, uiLogin, uniqueClub, type TestClub, goLive } from './support'
 
 failOnCspViolations(test)
@@ -31,11 +31,11 @@ test.describe('two staff devices running one session', () => {
     await apiCreateClub(request, club)
     const pc = await secondDevice(browser, club)
 
-    // The phone starts the session while the PC waits on its setup screen: Join appears without a reload.
+    // The phone starts the session while the PC waits on its setup screen: it is offered without a reload.
     await signIn(page, club)
     await startSession(page, { location: 'Co-op Night' })
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee'])
-    await pc.page.getByRole('button', { name: 'Join “Co-op Night”' }).click(FOLLOW)
+    await openFromList(pc.page, 'Co-op Night', FOLLOW)
     await expect(pc.page.getByRole('heading', { name: 'Co-op Night' })).toBeVisible()
     await expect(queued(pc.page, 'Dee')).toBeVisible()
 
@@ -68,7 +68,7 @@ test.describe('two staff devices running one session', () => {
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee'])
     await startGame(page)
     const pc = await secondDevice(browser, club)
-    await pc.page.getByRole('button', { name: 'Join “Clash Night”' }).click(FOLLOW)
+    await openFromList(pc.page, 'Clash Night', FOLLOW)
     await expect(court(pc.page).getByText('In play')).toBeVisible()
 
     // The phone is offline when it records Court 1; the PC records it, and the club has the PC's first.
@@ -95,7 +95,7 @@ test.describe('two staff devices running one session', () => {
     await startSession(page, { location: 'Ending Night' })
     await checkIn(page, ['Ann', 'Bob'])
     const pc = await secondDevice(browser, club)
-    await pc.page.getByRole('button', { name: 'Join “Ending Night”' }).click(FOLLOW)
+    await openFromList(pc.page, 'Ending Night', FOLLOW)
     await expect(pc.page.getByRole('heading', { name: 'Ending Night' })).toBeVisible()
 
     await openSessionMenu(pc.page)
@@ -108,23 +108,91 @@ test.describe('two staff devices running one session', () => {
     await pc.context.close()
   })
 
-  test('a second session started elsewhere is flagged, and staff choose which one runs', async ({ page, browser, request }) => {
+  test('a second session runs beside the first, each on its own live board', async ({ page, browser, request }) => {
     const club = uniqueClub('Two')
     await apiCreateClub(request, club)
     await signIn(page, club)
     await startSession(page, { location: 'First Night' })
+    await goLive(page)
     await checkIn(page, ['Ann'])
 
-    // The PC starts its own instead of joining: it is told, and can join the running one.
+    // The PC starts its own session instead of opening the phone's: both keep running.
     const pc = await secondDevice(browser, club)
-    await expect(pc.page.getByRole('button', { name: 'Join “First Night”' })).toBeVisible(FOLLOW)
+    await expect(openSessionsList(pc.page).getByText('First Night')).toBeVisible(FOLLOW)
     await startSession(pc.page, { location: 'Second Night' })
+    await goLive(pc.page)
     await checkIn(pc.page, ['Zed'])
-    const banner = pc.page.getByRole('alert').filter({ hasText: 'Another staff device is running “First Night”' })
-    await expect(banner).toBeVisible(FOLLOW)
-    await banner.getByRole('button', { name: 'Join “First Night”' }).click()
-    await expect(pc.page.getByRole('heading', { name: 'First Night' })).toBeVisible()
-    await expect(queued(pc.page, 'Ann')).toBeVisible()
+    await expect(pc.page.getByRole('alert').filter({ hasText: 'Another staff device is running' })).toHaveCount(0)
+    await expect(queued(page, 'Ann')).toBeVisible()
+    await expect(queued(page, 'Zed')).toHaveCount(0)
+
+    // Players choose their session on the club's link; each session's own link shows just that one.
+    const viewer = await pc.context.newPage()
+    await viewer.goto(`/club/${club.slug}/live`)
+    const chooser = viewer.getByText(/This club is running 2 sessions/)
+    await expect(chooser).toBeVisible(FOLLOW)
+    await viewer.getByRole('link', { name: 'First Night' }).click()
+    await expect(viewer).toHaveURL(new RegExp(`/club/${club.slug}/live/[0-9a-f-]{36}$`))
+    await expect(viewer.getByText('Ann').first()).toBeVisible(FOLLOW)
+    await expect(viewer.getByText('Zed')).toHaveCount(0)
+    await pc.context.close()
+  })
+})
+
+test.describe('pausing and leaving with several staff devices', () => {
+  test('a pause on one device is shown on the other, which can resume it for both', async ({ page, browser, request }) => {
+    const club = uniqueClub('Pause')
+    await apiCreateClub(request, club)
+    await signIn(page, club)
+    await startSession(page, { location: 'Pause Night' })
+    await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee'])
+    const pc = await secondDevice(browser, club)
+    await openFromList(pc.page, 'Pause Night', FOLLOW)
+
+    // The phone pauses (its own banner says so); the PC is told who paused it, and can resume.
+    await page.getByRole('button', { name: 'Pause' }).click()
+    await expect(page.getByRole('status').filter({ hasText: /^Paused by this device/ })).toBeVisible()
+    const dialog = pc.page.getByRole('dialog', { name: /^Session paused by / })
+    await expect(dialog).toBeVisible(FOLLOW)
+    // Closing it keeps the session paused, and the banner and the board keep saying so.
+    await dialog.getByRole('button', { name: 'Keep paused' }).click()
+    await expect(pc.page.getByRole('status').filter({ hasText: /^Paused by / })).toBeVisible()
+    await expect(court(pc.page).getByText('The session is paused: resume it to start games.')).toBeVisible()
+    await pc.page.getByRole('button', { name: 'Resume' }).click()
+
+    // The phone sees it running again, and who resumed it.
+    await expect(page.getByText(/^Resumed by /).first()).toBeVisible(FOLLOW)
+    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible()
+    await startGame(page)
+    await pc.context.close()
+  })
+
+  test('leaving keeps a session running while another device has it open, and pauses it when nobody does', async ({ page, browser, request }) => {
+    const club = uniqueClub('Leave')
+    await apiCreateClub(request, club)
+    await signIn(page, club)
+    await startSession(page, { location: 'Leave Night' })
+    await checkIn(page, ['Ann'])
+    const pc = await secondDevice(browser, club)
+    await openFromList(pc.page, 'Leave Night', FOLLOW)
+
+    // The PC has it open: the phone leaves, and it keeps running.
+    await openSessionMenu(page)
+    await page.getByRole('button', { name: 'Leave session' }).click()
+    await expect(page.getByText(/It keeps running on /).first()).toBeVisible()
+    await expect(openSessionsList(page).getByText('Leave Night')).toBeVisible()
+    await expect(pc.page.getByRole('button', { name: 'Pause' })).toBeVisible()
+
+    // Now the PC leaves too, alone: it is paused, and the phone opening it again is told why, with Resume.
+    await openSessionMenu(pc.page)
+    await pc.page.getByRole('button', { name: 'Leave session' }).click()
+    await expect(pc.page.getByText(/^Paused and left “Leave Night”/).first()).toBeVisible()
+    await expect(openSessionsList(page).getByText('Paused', { exact: true })).toBeVisible(FOLLOW)
+    await openFromList(page, 'Leave Night')
+    const dialog = page.getByRole('dialog', { name: /^Session paused by / })
+    await expect(dialog).toContainText('left the session')
+    await dialog.getByRole('button', { name: 'Resume' }).click()
+    await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible()
     await pc.context.close()
   })
 })
@@ -141,7 +209,7 @@ test.describe('renaming', () => {
     await goLive(page)
     await checkIn(page, ['Ann'])
     const pc = await secondDevice(browser, club)
-    await pc.page.getByRole('button', { name: 'Join “Tusday”' }).click(FOLLOW)
+    await openFromList(pc.page, 'Tusday', FOLLOW)
     await expect(pc.page.getByRole('heading', { name: 'Tusday' })).toBeVisible()
 
     // Only the name changes: nothing else is pending, and it must still be sent.

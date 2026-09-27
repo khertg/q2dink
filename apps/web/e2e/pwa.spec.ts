@@ -20,5 +20,5 @@ test('keeps working offline after the first load', async ({ page, context }) => 
   await page.reload()
 
   await expect(page.getByText('Set up an open play session')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Start session' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create session' })).toBeVisible()
 })

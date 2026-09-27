@@ -10,7 +10,7 @@ import { playerStatuses } from '@/lib/playerStatus'
 import { levelLabel } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
 import { useSkillEditor } from '@/lib/useSkillEditor'
-import { isNextUpPicked, nextGroup, nextGroups, nextUpSpots, nextUpStandIn, type NextGroup } from '@/rotation/engine'
+import { isNextUpPicked, nextGroup, nextGroups, nextUpSpots, nextUpStandIn, sessionStatus, type NextGroup } from '@/rotation/engine'
 import { hasLevelCourts, sameLevels } from '@/rotation/levels'
 import type { Court, SessionState, Teams } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
@@ -62,6 +62,14 @@ export function BoardScreen({ session }: { session: SessionState }) {
   const candidates: Candidate[] = statuses.map((status) => ({ player: session.players[status.id], status }))
   const statusOf = (id: number) => statuses.find((s) => s.id === id)
   const slotsPerTeam = session.mode === 'doubles' ? 2 : 1
+  // Games start only while the session's clock runs.
+  const status = sessionStatus(session)
+  const stoppedReason =
+    status === 'notStarted'
+      ? 'Start the session (at the top) to start games.'
+      : status === 'paused'
+        ? 'The session is paused: resume it to start games.'
+        : undefined
 
   const courtName = (courtId: number) =>
     session.courts.find((c) => c.id === courtId)?.name ?? `Court ${courtId}`
@@ -210,6 +218,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
             waitingMessage={waitingMessage(session, court.levels)}
             nextHere={nextHereFor(court)}
             onStart={(options) => handleStart(court.id, options)}
+            stoppedReason={stoppedReason}
             onReplace={(outId, inId, options) => handleReplace(court.id, outId, inId, options.sendOnBreak)}
             onRemove={(id) => handleOffCourt(court.id, id, false)}
             onTakeBreak={(id) => handleOffCourt(court.id, id, true)}

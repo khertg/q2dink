@@ -2,18 +2,21 @@ import {
   isErrorCode,
   type AuditPage,
   type ClubDevice,
+  type ClubSessionSummary,
   type DeletedHistorySummary,
   type AuthGrant,
   type AvatarIndex,
   type HistorySummary,
   type LifetimePlayer,
   type LiveRow,
+  type LiveSessionsResponse,
   type LoginResponse,
   type ConflictBody,
   type PublishResponse,
   type RenameClubResponse,
   type ResetPasswordResponse,
   type SessionStateRow,
+  type SessionsResponse,
   type RosterResponse,
   type StaffAvatar,
   type StaffAvatarIndex,
@@ -52,6 +55,10 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
   const EventSourceImpl = options.EventSource ?? (typeof EventSource === 'undefined' ? undefined : EventSource)
   const base = baseUrl.replace(/\/+$/, '')
   const slugPath = (slug: string) => encodeURIComponent(slug)
+  const sessionQuery = (sessionId?: string) => (sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '')
+  /** A club's live board, or one of its sessions' boards. */
+  const livePath = (slug: string, sessionId?: string) =>
+    `/clubs/${slugPath(slug)}/live${sessionId ? `/${encodeURIComponent(sessionId)}` : ''}`
 
   async function request<T>(method: string, path: string, opts: RequestOptions & { nullOn404: true }): Promise<T | null>
   async function request<T>(method: string, path: string, opts?: RequestOptions): Promise<T>
@@ -112,9 +119,27 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
       }
     },
 
-    fetchFullSession: (token) => request<unknown>('GET', '/session', { token, nullOn404: true }),
+    fetchFullSession: (token, sessionId) =>
+      request<unknown>('GET', `/session${sessionQuery(sessionId)}`, { token, nullOn404: true }),
 
-    fetchSessionState: (token) => request<SessionStateRow>('GET', '/session/state', { token, nullOn404: true }),
+    fetchSessionState: (token, sessionId) =>
+      request<SessionStateRow>('GET', `/session/state${sessionQuery(sessionId)}`, { token, nullOn404: true }),
+
+    async listSessions(token) {
+      return (await request<SessionsResponse>('GET', '/sessions', { token })).sessions satisfies ClubSessionSummary[]
+    },
+
+    async putPresence(token, sessionId, deviceId) {
+      await request('PUT', `/sessions/${encodeURIComponent(sessionId)}/presence`, { token, body: { deviceId } })
+    },
+
+    async dropPresence(token, sessionId, deviceId) {
+      await request(
+        'DELETE',
+        `/sessions/${encodeURIComponent(sessionId)}/presence?deviceId=${encodeURIComponent(deviceId)}`,
+        { token },
+      )
+    },
 
     async clear(token, sessionId) {
       await request('DELETE', sessionId ? `/session?sessionId=${encodeURIComponent(sessionId)}` : '/session', { token })
@@ -202,17 +227,21 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
     avatarPhotoUrl: (slug, key, version) =>
       `${base}/clubs/${slugPath(slug)}/avatars/${encodeURIComponent(key)}/photo?v=${version}`,
 
-    fetchLive: (slug) => request<LiveRow>('GET', `/clubs/${slugPath(slug)}/live`, { nullOn404: true }),
+    fetchLive: (slug, sessionId) => request<LiveRow>('GET', livePath(slug, sessionId), { nullOn404: true }),
+
+    async listLive(slug) {
+      return (await request<LiveSessionsResponse>('GET', `/clubs/${slugPath(slug)}/lives`)).sessions
+    },
 
     async fetchClubPlayers(slug) {
       const result = await request<{ players: LifetimePlayer[] }>('GET', `/clubs/${slugPath(slug)}/players`)
       return result.players
     },
 
-    subscribeLive(slug, onChange, onRevision) {
+    subscribeLive(slug, onChange, onRevision, subscribeOptions = {}) {
       // Without EventSource (very old browsers) callers simply rely on polling.
       if (!EventSourceImpl) return () => undefined
-      const source = new EventSourceImpl(`${base}/clubs/${slugPath(slug)}/live/stream`)
+      const source = new EventSourceImpl(`${base}${livePath(slug, subscribeOptions.sessionId)}/stream`)
 
       const listen = (type: 'update' | 'cleared') =>
         source.addEventListener(type, (event) => {
@@ -229,8 +258,22 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
       if (onRevision) {
         source.addEventListener('revision', (event) => {
           try {
-            const { revision } = JSON.parse((event as MessageEvent<string>).data) as { revision: unknown }
-            if (typeof revision === 'number') onRevision(revision)
+            const { revision, sessionId } = JSON.parse((event as MessageEvent<string>).data) as {
+              revision: unknown
+              sessionId?: unknown
+            }
+            if (typeof revision === 'number') onRevision(revision, typeof sessionId === 'string' ? sessionId : undefined)
+          } catch {
+            // Ignore a garbled event; the poll will correct it.
+          }
+        })
+      }
+      const { onEnded } = subscribeOptions
+      if (onEnded) {
+        source.addEventListener('ended', (event) => {
+          try {
+            const { sessionId } = JSON.parse((event as MessageEvent<string>).data) as { sessionId: unknown }
+            if (typeof sessionId === 'string') onEnded(sessionId)
           } catch {
             // Ignore a garbled event; the poll will correct it.
           }

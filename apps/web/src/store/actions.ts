@@ -12,6 +12,7 @@ import {
   fillNextUpSpot,
   lockPartners,
   moveCourt,
+  pauseSession,
   recordResult,
   recordScore,
   renameCourt,
@@ -21,16 +22,19 @@ import {
   replaceNextUp,
   replacePlayer,
   resetNextUp,
+  resumeSession,
+  sessionNow,
   setAvgGameMinutes,
   setLive,
   setPlayerSkill,
   startGame,
+  startSessionClock,
   unlockPartners,
   type MatchEdit,
   type NextGroupOptions,
   type ReplacePlayerOptions,
 } from '@/rotation/engine'
-import type { RosterPlayer, SessionState } from '@/rotation/types'
+import type { DeviceRef, PausedBy, RosterPlayer, SessionState } from '@/rotation/types'
 
 /** Who to check in: a saved player's details. Their id in the session is chosen when it is applied. */
 export type CheckInPlayer = Pick<RosterPlayer, 'name' | 'skill' | 'gender'>
@@ -65,6 +69,11 @@ export type SessionAction =
   | { type: 'resetNextUp' }
   | { type: 'lockPartners'; a: number; b: number }
   | { type: 'unlockPartners'; playerId: number }
+  /** Start a session that was set up without starting: its clock runs from `now`. */
+  | { type: 'startClock'; now: number; by?: DeviceRef }
+  /** Stop the session clock (a no-op when it is already stopped). */
+  | { type: 'pause'; now: number; by?: PausedBy }
+  | { type: 'resume'; now: number; by?: DeviceRef }
   /** Undo: back to `before`, but only from exactly `after`; after anyone else's change it no longer applies. */
   | { type: 'restore'; before: SessionState; after: SessionState }
 
@@ -95,6 +104,24 @@ const same = (a: SessionState, b: SessionState) => JSON.stringify(a) === JSON.st
  */
 export function applyAction(session: SessionState, action: SessionAction): Applied {
   switch (action.type) {
+    case 'startClock':
+      return { session: startSessionClock(session, action.now, action.by) }
+    case 'pause':
+      return { session: pauseSession(session, action.now, action.by) }
+    case 'resume':
+      return { session: resumeSession(session, action.now, action.by) }
+    default:
+      // While the clock stands still, whatever happens is recorded at the moment it stopped.
+      return applyChange(session, 'now' in action && action.now !== undefined ? { ...action, now: sessionNow(session, action.now) } : action)
+  }
+}
+
+function applyChange(session: SessionState, action: SessionAction): Applied {
+  switch (action.type) {
+    case 'startClock':
+    case 'pause':
+    case 'resume':
+      return applyAction(session, action)
     case 'setAvgGameMinutes':
       return { session: setAvgGameMinutes(session, action.minutes) }
     case 'setLive':

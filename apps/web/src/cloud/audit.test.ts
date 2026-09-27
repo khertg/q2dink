@@ -66,9 +66,11 @@ describe('recording session changes', () => {
   it('logs a change straight away while the session is not shared with the club yet', async () => {
     store().startSession('Open play', 'doubles', 2)
     store().checkInPlayer(player(1))
+    store().startClock()
     await vi.waitFor(async () => expect((await queued()).map((e) => e.summary)).toEqual([
-      'Started “Open play” (Doubles, 2 courts)',
+      'Created “Open play” (Doubles, 2 courts)',
       'Checked in P1',
+      'Started the session: waiting times run from now',
     ]))
     expect((await queued()).every((e) => e.sessionId === store().sessionId && e.clubSlug === 'downtown')).toBe(true)
   })
@@ -92,6 +94,7 @@ describe('recording session changes', () => {
 
   it('logs a change another device got to first as not applied, and one replayed as it was', async () => {
     store().startSession('Open play', 'singles', 2)
+    store().startClock()
     for (const n of [1, 2]) store().checkInPlayer(player(n))
     store().shareSession()
     const club = store().session!

@@ -194,4 +194,30 @@ export const MIGRATIONS: Migration[] = [
       create index session_history_deleted_idx on session_history (club_slug, deleted_at);
     `,
   },
+  {
+    id: '010_multi_session',
+    sql: `
+      -- A club can run several sessions at once: each has its own private copy, revision and live board.
+      update session_backups set session_id = gen_random_uuid() where session_id is null;
+      alter table session_backups alter column session_id set not null;
+      alter table session_backups drop constraint session_backups_pkey;
+      alter table session_backups add primary key (club_slug, session_id);
+
+      alter table live_sessions add column session_id uuid;
+      update live_sessions l set session_id = b.session_id from session_backups b where b.club_slug = l.club_slug;
+      delete from live_sessions where session_id is null;
+      alter table live_sessions alter column session_id set not null;
+      alter table live_sessions drop constraint live_sessions_pkey;
+      alter table live_sessions add primary key (club_slug, session_id);
+
+      -- Which staff devices have a session open, so leaving one another device has open does not pause it.
+      create table session_presence (
+        club_slug  text not null references clubs (slug) on delete cascade,
+        session_id uuid not null,
+        device_id  text not null check (char_length(device_id) between 1 and 64),
+        seen_at    timestamptz not null default now(),
+        primary key (club_slug, session_id, device_id)
+      );
+    `,
+  },
 ]

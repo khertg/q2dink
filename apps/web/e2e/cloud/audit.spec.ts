@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { failOnCspViolations } from '../cspWatch'
-import { checkIn, openSessionMenu, startGame, startSession } from '../helpers'
+import { checkIn, openFromList, openSessionMenu, startGame, startSession } from '../helpers'
 import { apiCreateClub, bearer, expectSignedIn, nameDevice, storedToken, uiLogin, uniqueClub, type TestClub } from './support'
 
 failOnCspViolations(test)
@@ -59,7 +59,7 @@ test('tells two identical iPhones apart, and shows who did what', async ({ brows
   // Desk starts the session and checks players in; Maria joins and starts a game.
   await startSession(desk.page, { location: 'Audit Night' })
   await checkIn(desk.page, ['Ann', 'Bob', 'Cy', 'Dee'])
-  await maria.page.getByRole('button', { name: 'Join “Audit Night”' }).click(FOLLOW)
+  await openFromList(maria.page, 'Audit Night', FOLLOW)
   await expect(maria.page.getByRole('heading', { name: 'Audit Night' })).toBeVisible()
   await startGame(maria.page)
 
@@ -69,7 +69,8 @@ test('tells two identical iPhones apart, and shows who did what', async ({ brows
     const rows = activity.getByRole('list', { name: 'Activity' }).getByRole('listitem')
     await expect(rows.filter({ hasText: 'Checked in Ann' }).filter({ hasText: 'Desk' })).toHaveCount(1, FOLLOW)
     await expect(rows.filter({ hasText: /^Court 1: started / }).filter({ hasText: 'Maria' })).toHaveCount(1, FOLLOW)
-    await expect(rows.filter({ hasText: 'Started “Audit Night”' }).filter({ hasText: 'Desk' })).toHaveCount(1)
+    await expect(rows.filter({ hasText: 'Created “Audit Night”' }).filter({ hasText: 'Desk' })).toHaveCount(1)
+    await expect(rows.filter({ hasText: 'Started the session' }).filter({ hasText: 'Desk' })).toHaveCount(1)
     await expect(rows.filter({ hasText: 'Joined “Audit Night”' }).filter({ hasText: 'Maria' })).toHaveCount(1)
     await page.keyboard.press('Escape')
   }

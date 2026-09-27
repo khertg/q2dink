@@ -44,8 +44,11 @@ export async function startSession(
   await page.getByRole('button', { name: mode }).click()
   if (matchmaking) await choose(page, 'Matchmaking', matchmaking)
   await page.getByLabel('Average game length (minutes)').fill(String(gameMinutes))
-  await page.getByRole('button', { name: 'Start session' }).click()
+  await page.getByRole('button', { name: 'Create session' }).click()
   await expect(page.getByRole('heading', { name: location })).toBeVisible()
+  // Created sessions do not start by themselves: most specs want one running.
+  await page.getByRole('button', { name: 'Start session' }).click()
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible()
 }
 
 export interface PlayerSpec {
@@ -129,4 +132,18 @@ export async function addCourt(page: Page) {
   await dialog.getByRole('button', { name: 'Add court' }).click()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
+}
+
+/** The setup screen's list of sessions running now (left on this device, or on the club's other devices). */
+export const openSessionsList = (page: Page) => page.getByRole('list', { name: 'Open sessions' })
+
+/** Open a running session from the setup screen's list, by name. */
+export async function openFromList(page: Page, location: string, options: { timeout?: number } = {}) {
+  await openSessionsList(page)
+    .getByRole('listitem')
+    .filter({ has: page.getByText(location, { exact: true }) })
+    .getByRole('button', { name: 'Open' })
+    .click(options)
+  // A dialog (such as "Session paused by …") hides the page behind it from getByRole.
+  await expect(page.getByRole('heading', { name: location }).or(page.getByRole('dialog'))).toBeVisible()
 }

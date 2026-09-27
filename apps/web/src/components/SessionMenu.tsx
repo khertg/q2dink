@@ -1,8 +1,9 @@
 import { MAX_LOCATION_LENGTH } from '@q2dink/shared'
-import { HistoryIcon, LogOutIcon, MoreVerticalIcon, PencilIcon, QrCodeIcon, RadioIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { DoorOpenIcon, HistoryIcon, LogOutIcon, MoreVerticalIcon, PencilIcon, QrCodeIcon, RadioIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useClubAuth } from '@/cloud/auth'
+import { leaveOpenSession } from '@/cloud/sync'
 import { viewerUrl } from '@/cloud/url'
 import { ActivityDialog } from '@/components/ActivityDialog'
 import { EndSessionDialog } from '@/components/EndSessionDialog'
@@ -11,7 +12,7 @@ import { RenameDialog } from '@/components/RenameDialog'
 import { SharePanel } from '@/components/SharePanel'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { isLive } from '@/rotation/engine'
+import { isLive, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -25,11 +26,23 @@ export function SessionMenu({ session }: { session: SessionState }) {
   const sessionId = useSessionStore((s) => s.sessionId)
   const setLive = useSessionStore((s) => s.setLive)
   const live = isLive(session)
+  const notStarted = sessionStatus(session) === 'notStarted'
 
   function toggleLive() {
     setLive(!live)
     if (live) toast('Not live: the public page shows no game')
-    else toast(`Live: players can see the board at ${club ? viewerUrl(club.slug) : 'the live link'}`)
+    else toast(`Live: players can see the board at ${club ? viewerUrl(club.slug, sessionId) : 'the live link'}`)
+  }
+
+  /** Back to the setup screen without ending it: paused, unless another staff device has it open. */
+  async function leave() {
+    const name = location
+    const { paused, stillOpenOn } = await leaveOpenSession()
+    if (stillOpenOn.length > 0) {
+      toast(`Left “${name}”. It keeps running on ${stillOpenOn.map((d) => d.name).join(', ')}.`)
+    } else {
+      toast(paused ? `Paused and left “${name}”. Open it again from the list to resume.` : `Left “${name}”.`)
+    }
   }
 
   return (
@@ -63,7 +76,14 @@ export function SessionMenu({ session }: { session: SessionState }) {
           </PopoverClose>
           {club && (
             <PopoverClose asChild>
-              <Button type="button" variant="ghost" className="w-full justify-start" onClick={toggleLive}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={toggleLive}
+                disabled={notStarted}
+                title={notStarted ? 'Start the session first' : undefined}
+              >
                 <RadioIcon aria-hidden="true" /> {live ? 'Stop live' : 'Go live'}
               </Button>
             </PopoverClose>
@@ -93,6 +113,11 @@ export function SessionMenu({ session }: { session: SessionState }) {
             </PopoverClose>
           )}
           <div className="border-t pt-1">
+            <PopoverClose asChild>
+              <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => void leave()}>
+                <DoorOpenIcon aria-hidden="true" /> Leave session
+              </Button>
+            </PopoverClose>
             <PopoverClose asChild>
               <Button
                 type="button"
@@ -138,6 +163,7 @@ export function SessionMenu({ session }: { session: SessionState }) {
       {club && (
         <SharePanel
           photoToggle
+          sessionId={sessionId}
           open={active === 'share'}
           onOpenChange={(open) => setActive(open ? 'share' : null)}
         />

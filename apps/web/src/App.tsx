@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
-import { clubSlugFromPath } from '@q2dink/shared'
+import { clubSlugFromPath, liveSessionIdFromPath } from '@q2dink/shared'
 import { useClubAuth } from '@/cloud/auth'
 import { cloud } from '@/cloud/client'
 import { requiresDeviceName, requiresLogin } from '@/cloud/gate'
@@ -36,6 +36,7 @@ export default function App() {
   // Anything under /club is the public viewer, which never runs staff features.
   const isViewerPath = path === '/club' || path.startsWith('/club/')
   const viewerSlug = clubSlugFromPath(path)
+  const viewerSessionId = liveSessionIdFromPath(path) ?? undefined
   // With a cloud set up, staff log in to a club first; the saved login keeps the app working offline.
   const mustLogIn = requiresLogin({ cloudConfigured: cloud !== null, signedIn, isViewerPath })
   // Then the device gets a name, so the club's activity log can tell its devices apart.
@@ -56,7 +57,7 @@ export default function App() {
       {!isViewerPath && <InstallBanner />}
       {isViewerPath ? (
         viewerSlug ? (
-          <ViewerScreen slug={viewerSlug} />
+          <ViewerScreen slug={viewerSlug} sessionId={viewerSessionId} />
         ) : (
           <p className="py-10 text-center text-muted-foreground">
             That club link isn&apos;t valid. Check the link or scan the QR code again.

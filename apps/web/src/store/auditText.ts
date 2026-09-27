@@ -112,6 +112,14 @@ export function describeAction(before: SessionState, action: SessionAction, afte
     }
     case 'restore':
       return say('Undid the last change')
+    case 'startClock':
+      if (!before.notStarted) return say('Started the session (it had already started)')
+      return say('Started the session: waiting times run from now')
+    case 'pause':
+      if (before.clockStoppedAt !== undefined) return say('Paused the session (it was already paused)')
+      return say(action.by?.reason === 'left' ? 'Paused the session on leaving it' : 'Paused the session')
+    case 'resume':
+      return say('Resumed the session')
   }
 }
 

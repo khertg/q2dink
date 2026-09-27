@@ -5,9 +5,11 @@ import { partnerOf, selectGroup, splitGroup } from '../matchmaking/grouping'
 import { hasLevelCourts, inLevels, laneQueue, lanesOf, normalizeLevels, sameLevels, type LevelRange } from './levels'
 import type {
   Court,
+  DeviceRef,
   GameMode,
   MatchmakingMode,
   MatchRecord,
+  PausedBy,
   PendingPartners,
   PlayerStats,
   RosterPlayer,
@@ -227,11 +229,68 @@ export function renamePlayer(state: SessionState, playerId: number, name: string
 
 /** Show the session on the club's public live page, or keep it off it. Staff devices share it either way. */
 export function setLive(state: SessionState, live: boolean): SessionState {
+  if (live && state.notStarted) throw new RangeError('Start the session before going live')
   return { ...state, live }
 }
 
-/** Whether players see the session on the public live page: missing means live (sessions from before the choice). */
-export const isLive = (state: SessionState) => state.live !== false
+/**
+ * Whether players see the session on the public live page: missing means live (sessions from before the
+ * choice). A session that has not started is never live.
+ */
+export const isLive = (state: SessionState) => state.live !== false && !state.notStarted
+
+// ---- session clock -----------------------------------------------------------
+
+export type SessionStatus = 'notStarted' | 'paused' | 'running'
+
+export const sessionStatus = (state: SessionState): SessionStatus =>
+  state.notStarted ? 'notStarted' : state.clockStoppedAt !== undefined ? 'paused' : 'running'
+
+/** The time an action made at `now` records: the moment the clock stopped, while it is stopped. */
+export const sessionNow = (state: SessionState, now: number): number => state.clockStoppedAt ?? now
+
+/** A new session that has not started: its clock stands still from `now` until staff start it. */
+export function markNotStarted(state: SessionState, now: number): SessionState {
+  const { startedAt: _startedAt, startedBy: _startedBy, pausedBy: _pausedBy, ...rest } = state
+  return { ...rest, notStarted: true, clockStoppedAt: now }
+}
+
+/** Run the clock again from `now`: every running timer moves on by the time it stood still. */
+function runClock(state: SessionState, now: number): SessionState {
+  const stoppedAt = state.clockStoppedAt ?? now
+  const { clockStoppedAt: _stopped, pausedBy: _pausedBy, notStarted: _notStarted, ...rest } = state
+  return shiftSessionClock(rest, now - stoppedAt)
+}
+
+/**
+ * Start a session that was set up without starting: everyone checked in so far starts waiting now, and
+ * games can begin. Starting one that has started changes nothing, so two devices pressing Start at once agree
+ * on the first.
+ */
+export function startSessionClock(state: SessionState, now: number, by?: DeviceRef): SessionState {
+  if (!state.notStarted) return state
+  return { ...runClock(state, now), startedAt: now, ...(by ? { startedBy: by } : {}) }
+}
+
+/**
+ * Pause the session: waits and games in progress stop counting until it is resumed. Pausing a session that
+ * is already paused (or not started) changes nothing, so two devices pausing at once agree on the first.
+ */
+export function pauseSession(state: SessionState, now: number, by?: PausedBy): SessionState {
+  if (state.clockStoppedAt !== undefined) return state
+  const { resumedBy: _resumedBy, ...rest } = state
+  // Never before the last thing that happened: a pause sent late (the device was offline) or from a device whose
+  // clock is behind would otherwise stop the clock before games that started since, and their time would go negative.
+  const at = Math.max(now, lastActivityAt(state) ?? now)
+  return { ...rest, clockStoppedAt: at, ...(by ? { pausedBy: by } : {}) }
+}
+
+/** Resume a paused session. Resuming one that is running changes nothing; one not started must be started. */
+export function resumeSession(state: SessionState, now: number, by?: DeviceRef): SessionState {
+  if (state.notStarted) throw new Error('The session has not started yet')
+  if (state.clockStoppedAt === undefined) return state
+  return { ...runClock(state, now), ...(by ? { resumedBy: by } : {}) }
+}
 
 export function setAvgGameMinutes(state: SessionState, minutes: number): SessionState {
   if (!isValidGameMinutes(minutes)) {
@@ -561,6 +620,8 @@ export interface StartGameOptions extends NextGroupOptions {
  * or if no group can be formed. The players leave the queue.
  */
 export function startGame(state: SessionState, courtId: number, options: StartGameOptions = {}): SessionState {
+  if (state.notStarted) throw new RangeError('Start the session before starting a game')
+  if (state.clockStoppedAt !== undefined) throw new RangeError('The session is paused: resume it to start a game')
   const court = findCourt(state, courtId)
   if (court.notStarted) return startStaged(state, court, options.now)
   if (court.teams) throw new Error(`${court.name} already has a game in progress`)
@@ -1223,6 +1284,7 @@ export function lastActivityAt(session: SessionState): number | undefined {
     ...(session.matches ?? []).map((m) => m.endedAt),
     ...Object.values(session.queuedAt ?? {}),
     ...session.courts.flatMap((c) => [c.startedAt, c.pausedAt]),
+    session.clockStoppedAt,
   ].filter((t): t is number => t !== undefined)
   return times.length > 0 ? Math.max(...times) : undefined
 }

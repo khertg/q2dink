@@ -18,18 +18,24 @@ import { activePlayerCount, useSessionStore } from './session'
 const player = (id: number): RosterPlayer => ({ id, name: `P${id}`, skill: 3 })
 const store = () => useSessionStore.getState()
 
+/** A session created and started straight away, as most tests want. */
+function startRunning(...args: Parameters<ReturnType<typeof store>['startSession']>) {
+  store().startSession(...args)
+  store().startClock()
+}
+
 function checkInMany(count: number) {
   for (let id = 1; id <= count; id++) store().checkInPlayer(player(id))
 }
 
 beforeEach(() => {
-  useSessionStore.setState({ location: '', session: null, previous: null })
+  useSessionStore.setState({ location: '', session: null, previous: null, parked: {}, endedSessionIds: [], base: null, pending: [] })
 })
 
 describe('session store', () => {
   describe('the public live page', () => {
     it('keeps a new session off it until staff go live, and can take it off again', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       expect(store().session!.live).toBe(false)
       store().setLive(true)
       expect(store().session!.live).toBe(true)
@@ -38,7 +44,7 @@ describe('session store', () => {
     })
 
     it('keeps the pending result undo, and undoing never changes whether it is live', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -50,21 +56,21 @@ describe('session store', () => {
   })
 
   it('starts a session with empty courts', () => {
-    store().startSession('Downtown Club', 'doubles', 2)
+    startRunning('Downtown Club', 'doubles', 2)
     expect(store().location).toBe('Downtown Club')
     expect(store().session?.courts).toHaveLength(2)
     expect(store().session?.queue).toEqual([])
   })
 
   it('does not start a game by itself, however many players check in', () => {
-    store().startSession('Club', 'doubles', 2)
+    startRunning('Club', 'doubles', 2)
     checkInMany(8)
     expect(store().session!.courts.every((c) => c.teams === null)).toBe(true)
     expect(store().session!.queue).toHaveLength(8)
   })
 
   it('starts the next group on the chosen court', () => {
-    store().startSession('Club', 'doubles', 2)
+    startRunning('Club', 'doubles', 2)
     checkInMany(6)
     store().startGame(2)
     expect(store().session!.courts[0].teams).toBeNull()
@@ -73,14 +79,14 @@ describe('session store', () => {
   })
 
   it('refuses to start with too few players and changes nothing', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(3)
     expect(() => store().startGame(1)).toThrow('Not enough players')
     expect(store().session!.queue).toEqual([1, 2, 3])
   })
 
   it('clears the pending result undo when a game starts', () => {
-    store().startSession('Club', 'doubles', 2)
+    startRunning('Club', 'doubles', 2)
     checkInMany(8)
     store().startGame(1)
     store().recordResult(1, 0)
@@ -90,7 +96,7 @@ describe('session store', () => {
 
   describe('renaming the session', () => {
     it('trims the new name and refuses an empty or too long one', () => {
-      store().startSession('Tuesday', 'doubles', 1)
+      startRunning('Tuesday', 'doubles', 1)
       store().renameSession('  Tuesday open play  ')
       expect(store().location).toBe('Tuesday open play')
       expect(() => store().renameSession('   ')).toThrow('Enter a session name.')
@@ -99,7 +105,7 @@ describe('session store', () => {
     })
 
     it('is only waiting to be sent while the session is shared with the club', () => {
-      store().startSession('Tuesday', 'doubles', 1)
+      startRunning('Tuesday', 'doubles', 1)
       store().renameSession('Not shared')
       expect(store().locationPending).toBe(false)
 
@@ -109,7 +115,7 @@ describe('session store', () => {
     })
 
     it('keeps a rename not sent yet when another device moves the club copy on, and takes theirs otherwise', () => {
-      store().startSession('Tuesday', 'doubles', 1)
+      startRunning('Tuesday', 'doubles', 1)
       store().shareSession()
       const clubCopy = store().session!
 
@@ -122,7 +128,7 @@ describe('session store', () => {
     })
 
     it('is sent once the club takes the name, but not if it changed again meanwhile', () => {
-      store().startSession('Tuesday', 'doubles', 1)
+      startRunning('Tuesday', 'doubles', 1)
       store().shareSession()
       store().renameSession('First')
       store().renameSession('Second')
@@ -135,7 +141,7 @@ describe('session store', () => {
 
   describe('renaming a player', () => {
     it('changes the name for the rest of the session and survives a reload', async () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().renamePlayer(2, 'Anne')
       expect(store().session!.players[2].name).toBe('Anne')
@@ -144,7 +150,7 @@ describe('session store', () => {
     })
 
     it('keeps the pending result undo, and undoing never brings the old name back', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -154,7 +160,7 @@ describe('session store', () => {
     })
 
     it('refuses a taken name and changes nothing', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(2)
       const before = store().session
       expect(() => store().renamePlayer(1, 'p2')).toThrow('already in this session')
@@ -164,7 +170,7 @@ describe('session store', () => {
 
   describe('changing a skill level', () => {
     it('changes the level for the rest of the session and survives a reload', async () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().setPlayerSkill(2, 6)
       expect(store().session!.players[2].skill).toBe(6)
@@ -173,7 +179,7 @@ describe('session store', () => {
     })
 
     it('keeps the pending result undo, and undoing never reverts the level', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -184,7 +190,7 @@ describe('session store', () => {
     })
 
     it('refuses a player who is not in the session and changes nothing', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(2)
       const before = store().session
       expect(() => store().setPlayerSkill(9, 4)).toThrow()
@@ -194,25 +200,25 @@ describe('session store', () => {
 
   describe('session identity', () => {
     it('gives each new session its own id and start time, with nothing counted yet', () => {
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       const first = store()
       expect(first.sessionId).toMatch(/^[0-9a-f-]{36}$/)
       expect(first.startedAt).toBeGreaterThan(0)
       expect(first.lifetimeCounted).toEqual({})
       store().endSession()
-      store().startSession('Two', 'doubles', 1)
+      startRunning('Two', 'doubles', 1)
       expect(store().sessionId).not.toBe(first.sessionId)
     })
 
     it('is cleared when the session ends', () => {
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       store().markLifetimeCounted({ 1: { games: 2, wins: 1, losses: 1 } })
       store().endSession()
       expect(store()).toMatchObject({ sessionId: '', startedAt: 0, lifetimeCounted: {}, session: null })
     })
 
     it('is kept when a session is resumed, so ending it again updates the same history entry', () => {
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       const session = store().session!
       const meta = { sessionId: 'abc', startedAt: 123, lifetimeCounted: { 1: { games: 1, wins: 1, losses: 0 } } }
       store().endSession()
@@ -221,7 +227,7 @@ describe('session store', () => {
     })
 
     it('gets a fresh identity when loaded without one (a session resumed from the club’s live backup)', () => {
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       const session = store().session!
       store().endSession()
       store().loadSession('One', session)
@@ -230,7 +236,7 @@ describe('session store', () => {
     })
 
     it('remembers what was counted, and survives a reload', async () => {
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       store().markLifetimeCounted({ 1: { games: 2, wins: 1, losses: 1 } })
       const { sessionId } = store()
       await useSessionStore.persist.rehydrate()
@@ -239,7 +245,7 @@ describe('session store', () => {
     })
 
     it('gives a session that was already running before history existed an identity on upgrade', async () => {
-      store().startSession('Old', 'doubles', 1)
+      startRunning('Old', 'doubles', 1)
       const session = store().session!
       localStorage.setItem('q2dink-session', JSON.stringify({ state: { location: 'Old', session }, version: 5 }))
       await useSessionStore.persist.rehydrate()
@@ -262,7 +268,7 @@ describe('session store', () => {
     it('freezes a queued player\'s wait, and an in-progress game\'s elapsed time, across the gap', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       // Checks in after the game starts, so still waiting when the session ends.
@@ -284,7 +290,7 @@ describe('session store', () => {
     it('does not shift anything when resuming a session that never ended (no endedAt given)', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
-      store().startSession('One', 'doubles', 1)
+      startRunning('One', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().checkInPlayer(player(5))
@@ -304,7 +310,7 @@ describe('session store', () => {
     const queuedNames = () => store().session!.queue.map((id) => store().session!.players[id].name)
 
     it('queues them in the order given, numbered by the session, without starting anything', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       expect(store().checkInPlayers([player(3), player(1), player(2), player(4)])).toBe(4)
       expect(queuedNames()).toEqual(['P3', 'P1', 'P2', 'P4'])
       // The session's own ids, the same on every staff device: never this device's roster ids.
@@ -313,7 +319,7 @@ describe('session store', () => {
     })
 
     it('skips anyone already checked in, matched by name, and says how many were new', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       store().checkInPlayer(player(2))
       expect(store().checkInPlayers([player(1), player(2), player(3), player(3)])).toBe(2)
       expect(queuedNames()).toEqual(['P2', 'P1', 'P3'])
@@ -321,7 +327,7 @@ describe('session store', () => {
     })
 
     it('clears the pending result undo once, and does nothing for an empty or repeated list', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordResult(1, 0)
@@ -338,13 +344,13 @@ describe('session store', () => {
   })
 
   it('reports false when a player is checked in twice', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     expect(store().checkInPlayer(player(1))).toBe(true)
     expect(store().checkInPlayer(player(1))).toBe(false)
   })
 
   it('requeues players after a result and leaves the court open', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(8)
     store().startGame(1)
     store().recordResult(1, 0)
@@ -354,7 +360,7 @@ describe('session store', () => {
   })
 
   it('undoes the last result', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(8)
     store().startGame(1)
     const before = store().session
@@ -364,7 +370,7 @@ describe('session store', () => {
   })
 
   it('refuses to undo after another change so later actions are not lost', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(8)
     store().startGame(1)
     store().recordResult(1, 0)
@@ -374,7 +380,7 @@ describe('session store', () => {
   })
 
   it('cancels a match and puts its players back in the queue', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(4)
     store().startGame(1)
     store().cancelMatch(1)
@@ -383,7 +389,7 @@ describe('session store', () => {
   })
 
   it('checks a waiting player out to a break', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(2)
     store().checkOutPlayer(1)
     expect(store().session!.onBreak).toEqual([1])
@@ -391,12 +397,12 @@ describe('session store', () => {
   })
 
   it('uses the chosen game length', () => {
-    store().startSession('Club', 'doubles', 1, { avgGameMinutes: 20 })
+    startRunning('Club', 'doubles', 1, { avgGameMinutes: 20 })
     expect(store().session!.avgGameMinutes).toBe(20)
   })
 
   it('keeps a pending undo and does not revert the game length when it changes', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(8)
     store().startGame(1)
     store().recordResult(1, 0)
@@ -407,7 +413,7 @@ describe('session store', () => {
   })
 
   it('replaces a playing player with a chosen waiting one', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(6)
     store().startGame(1)
     store().replacePlayer(1, 1, 6)
@@ -417,7 +423,7 @@ describe('session store', () => {
   })
 
   it('can send the player who comes off on a break instead', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(6)
     store().startGame(1)
     store().replacePlayer(1, 1, 6, { sendOnBreak: true })
@@ -427,7 +433,7 @@ describe('session store', () => {
 
   describe('changing who is next up', () => {
     it('keeps the chosen group until a game starts, and clears the pending result undo', () => {
-      store().startSession('Club', 'doubles', 2)
+      startRunning('Club', 'doubles', 2)
       checkInMany(8)
       store().startGame(1)
       store().recordResult(1, 0)
@@ -440,7 +446,7 @@ describe('session store', () => {
     })
 
     it('can be reset, and survives a reload', async () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(6)
       store().replaceNextUp(1, 6)
       await useSessionStore.persist.rehydrate()
@@ -450,7 +456,7 @@ describe('session store', () => {
     })
 
     it('refuses an impossible change and changes nothing', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(6)
       const before = store().session
       expect(() => store().replaceNextUp(5, 6)).toThrow()
@@ -459,7 +465,7 @@ describe('session store', () => {
   })
 
   it('starts a match with the locked pair on one team, and locking never starts one', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(4)
     store().lockPartners(1, 3)
     expect(store().session!.courts[0].teams).toBeNull()
@@ -469,7 +475,7 @@ describe('session store', () => {
   })
 
   it('starts an open mixed court by hand', () => {
-    store().startSession('Club', 'doubles', 1, { matchmaking: 'mixed' })
+    startRunning('Club', 'doubles', 1, { matchmaking: 'mixed' })
     for (let id = 1; id <= 4; id++) {
       store().checkInPlayer({ id, name: `P${id}`, skill: 3, gender: 'M' })
     }
@@ -479,7 +485,7 @@ describe('session store', () => {
   })
 
   it('tracks stats per result and undo reverts them', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(4)
     store().startGame(1)
     store().recordResult(1, 0)
@@ -492,7 +498,7 @@ describe('session store', () => {
     afterEach(() => vi.useRealTimers())
 
     it('records a score, deriving the winner', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       const [teamA, teamB] = store().session!.courts[0].teams!
@@ -507,7 +513,7 @@ describe('session store', () => {
     })
 
     it('requeues players after a score like after a result', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(8)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -516,7 +522,7 @@ describe('session store', () => {
     })
 
     it('undoes a score, restoring the game in progress and its start time', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(8)
       store().startGame(1)
       const before = store().session
@@ -529,7 +535,7 @@ describe('session store', () => {
     })
 
     it('logs a finished game and drops it again on undo', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -540,7 +546,7 @@ describe('session store', () => {
     })
 
     it('refuses to undo a score after another change', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       store().recordScore(1, 11, 5)
@@ -549,7 +555,7 @@ describe('session store', () => {
     })
 
     it('refuses level and out-of-range scores and changes nothing', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       const before = store().session
@@ -562,7 +568,7 @@ describe('session store', () => {
     it('startGame stamps the court with the time, and a result adds the time played', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       expect(store().session!.courts[0].startedAt).toBe(Date.parse('2026-01-01T10:00:00Z'))
@@ -575,7 +581,7 @@ describe('session store', () => {
     it('a score adds the time played too, and undo takes it back', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       vi.setSystemTime(new Date('2026-01-01T10:12:00Z'))
@@ -588,7 +594,7 @@ describe('session store', () => {
     it('cancelling a game records no time', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T10:00:00Z'))
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(4)
       store().startGame(1)
       vi.setSystemTime(new Date('2026-01-01T10:20:00Z'))
@@ -598,7 +604,7 @@ describe('session store', () => {
   })
 
   it('unlocks partners', () => {
-    store().startSession('Club', 'doubles', 1)
+    startRunning('Club', 'doubles', 1)
     checkInMany(2)
     store().lockPartners(1, 2)
     store().unlockPartners(2)
@@ -606,7 +612,7 @@ describe('session store', () => {
   })
 
   it('starts a session with the chosen matchmaking mode', () => {
-    store().startSession('Club', 'doubles', 1, { matchmaking: 'mixed' })
+    startRunning('Club', 'doubles', 1, { matchmaking: 'mixed' })
     expect(store().session!.matchmaking).toBe('mixed')
   })
 
@@ -614,7 +620,7 @@ describe('session store', () => {
     const courts = () => store().session!.courts
 
     it('adds a new court open, without starting anything on it', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(8)
       store().addCourt()
       expect(courts()).toHaveLength(2)
@@ -624,7 +630,7 @@ describe('session store', () => {
     })
 
     it('lets staff start the new court by hand', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       checkInMany(8)
       store().startGame(1)
       store().addCourt()
@@ -634,7 +640,7 @@ describe('session store', () => {
     })
 
     it('puts a cancelled game’s players first in the queue when a busy court closes', () => {
-      store().startSession('Club', 'doubles', 2)
+      startRunning('Club', 'doubles', 2)
       checkInMany(4)
       store().startGame(1)
       store().closeCourt(1)
@@ -644,7 +650,7 @@ describe('session store', () => {
     })
 
     it('keeps the queue order of a cancelled game’s players ahead of those still waiting', () => {
-      store().startSession('Club', 'doubles', 2)
+      startRunning('Club', 'doubles', 2)
       checkInMany(5) // player 5 waits
       store().startGame(1)
       store().closeCourt(1)
@@ -654,7 +660,7 @@ describe('session store', () => {
     })
 
     it('renames and reorders courts, and results still land on the right court', () => {
-      store().startSession('Club', 'doubles', 3)
+      startRunning('Club', 'doubles', 3)
       checkInMany(4)
       store().startGame(1)
       store().renameCourt(1, 'Center Court')
@@ -667,7 +673,7 @@ describe('session store', () => {
     })
 
     it('lets an invalid name through as an error instead of changing anything', () => {
-      store().startSession('Club', 'doubles', 2)
+      startRunning('Club', 'doubles', 2)
       expect(() => store().renameCourt(1, 'court 2')).toThrow(RangeError)
       expect(courts().map((c) => c.name)).toEqual(['Court 1', 'Court 2'])
     })
@@ -680,7 +686,7 @@ describe('session store', () => {
         ['close', () => store().closeCourt(2)],
       ]
       for (const [label, act] of actions) {
-        store().startSession('Club', 'doubles', 2)
+        startRunning('Club', 'doubles', 2)
         checkInMany(8)
         store().startGame(1)
         store().recordResult(1, 0)
@@ -690,15 +696,126 @@ describe('session store', () => {
     })
 
     it('will not close the last court', () => {
-      store().startSession('Club', 'doubles', 1)
+      startRunning('Club', 'doubles', 1)
       expect(() => store().closeCourt(1)).toThrow(RangeError)
       expect(courts()).toHaveLength(1)
     })
   })
 
   it('ends the session', () => {
-    store().startSession('Club', 'singles', 1)
+    startRunning('Club', 'singles', 1)
     store().endSession()
     expect(store().session).toBeNull()
+  })
+})
+
+describe('a session set up before it starts', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('checks players in without any clock running, and starts everyone waiting from zero', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    store().startSession('Club', 'doubles', 1)
+    expect(store().session!.notStarted).toBe(true)
+    vi.setSystemTime(1_060_000)
+    checkInMany(4)
+    expect(() => store().startGame(1)).toThrow(/Start the session/)
+    vi.setSystemTime(1_600_000)
+    store().startClock()
+    expect(store().session!.queuedAt![1]).toBe(1_600_000)
+    expect(store().session!.startedAt).toBe(1_600_000)
+    store().startGame(1)
+    expect(store().session!.courts[0].teams).not.toBeNull()
+  })
+
+  it('pauses and resumes, keeping who paused it, and blocks new games while paused', () => {
+    startRunning('Club', 'doubles', 1)
+    checkInMany(4)
+    store().pauseSession()
+    expect(store().session!.pausedBy?.deviceId).toBeTruthy()
+    expect(() => store().startGame(1)).toThrow(/paused/)
+    store().resumeSession()
+    expect(store().session!.clockStoppedAt).toBeUndefined()
+    store().startGame(1)
+  })
+})
+
+describe('several sessions on one device', () => {
+  it('keeps the open session running when another is created, and opens it again with nothing lost', () => {
+    startRunning('Morning', 'doubles', 1)
+    checkInMany(2)
+    const morning = store().sessionId
+    store().startSession('Evening', 'doubles', 2)
+    expect(store().location).toBe('Evening')
+    expect(store().parked[morning].location).toBe('Morning')
+    const evening = store().sessionId
+
+    store().openSession(morning)
+    expect(store().location).toBe('Morning')
+    expect(store().session!.queue).toEqual([1, 2])
+    expect(Object.keys(store().parked)).toEqual([evening])
+  })
+
+  it('leaves a session without ending it, paused when asked, and ending another leaves it alone', () => {
+    startRunning('Morning', 'doubles', 1)
+    const morning = store().sessionId
+    store().leaveSession({ pause: true })
+    expect(store().session).toBeNull()
+    expect(store().parked[morning].session.pausedBy?.reason).toBe('left')
+    expect(store().endedSessionIds).toEqual([])
+
+    store().startSession('Evening', 'doubles', 1)
+    const evening = store().sessionId
+    store().endSession()
+    expect(store().endedSessionIds).toEqual([evening])
+    expect(store().parked[morning]).toBeDefined()
+  })
+
+  it('leaves without pausing when told another device has it open', () => {
+    startRunning('Morning', 'doubles', 1)
+    const morning = store().sessionId
+    store().leaveSession({ pause: false })
+    expect(store().parked[morning].session.clockStoppedAt).toBeUndefined()
+  })
+
+  it('keeps sessions left here, and several unsent ends, across a reload and an upgrade', async () => {
+    startRunning('Morning', 'doubles', 1)
+    const morning = store().sessionId
+    store().leaveSession({ pause: true })
+    await useSessionStore.persist.rehydrate()
+    expect(store().parked[morning].location).toBe('Morning')
+
+    const saved = JSON.parse(localStorage.getItem('q2dink-session')!) as { state: Record<string, unknown>; version: number }
+    const { parked: _parked, endedSessionIds: _ended, ...older } = saved.state
+    localStorage.setItem('q2dink-session', JSON.stringify({ state: { ...older, endedSessionId: 'old-one' }, version: 8 }))
+    await useSessionStore.persist.rehydrate()
+    expect(store().endedSessionIds).toEqual(['old-one'])
+    expect(store().parked).toEqual({})
+  })
+})
+
+describe('upgrading a device that is in the middle of a session', () => {
+  it('keeps it running (not "not started"), shared, with its unsent changes', async () => {
+    startRunning('Live now', 'doubles', 1)
+    checkInMany(4)
+    store().shareSession()
+    store().checkInPlayer(player(5))
+    const { session, base, pending, sessionId } = store()
+    // As 1.21 saved it: store version 8, a session from before the clock fields, one end field.
+    const { notStarted: _n, clockStoppedAt: _c, startedAt: _s, startedBy: _b, ...older } = session!
+    localStorage.setItem(
+      'q2dink-session',
+      JSON.stringify({
+        state: { location: 'Live now', session: older, sessionId, startedAt: 1, lifetimeCounted: {}, base, pending, endedSessionId: '' },
+        version: 8,
+      }),
+    )
+    await useSessionStore.persist.rehydrate()
+    expect(store().session!.notStarted).toBeUndefined()
+    expect(store().session!.queue).toEqual([1, 2, 3, 4, 5])
+    expect(store().pending).toHaveLength(1)
+    expect(store().base?.revision).toBe(base!.revision)
+    expect(store().endedSessionIds).toEqual([])
+    store().startGame(1)
   })
 })

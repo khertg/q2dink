@@ -14,7 +14,7 @@ import { SkillBadge } from '@/components/SkillBadge'
 import type { SkillLevel } from '@/db/db'
 import { levelLabel } from '@/lib/skill'
 import { TEAM_BUTTON, TEAM_NAMES } from '@/lib/teams'
-import { formatDuration, useNow } from '@/lib/time'
+import { formatDuration, useSessionNow } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { courtSlots, playedMs } from '@/rotation/engine'
 import type { Court, RosterPlayer } from '@/rotation/types'
@@ -55,6 +55,8 @@ interface Props {
   onScore?: (scoreA: number, scoreB: number) => void
   /** Cancel the game, or clear a court being set up. */
   onCancel?: () => void
+  /** While the session is not started or paused: why no game can start, shown instead of Start game. */
+  stoppedReason?: string
 }
 
 /**
@@ -64,7 +66,7 @@ interface Props {
  * time says "In play"; a court being set up by hand says "Not started".
  */
 function PlayingBadge({ court }: { court: Court }) {
-  const now = useNow()
+  const now = useSessionNow()
   if (court.notStarted) return <Badge variant="outline">Not started</Badge>
   const played = playedMs(court, now)
   if (court.pausedAt !== undefined) {
@@ -104,6 +106,7 @@ export function CourtCard({
   onStart,
   onScore,
   onCancel,
+  stoppedReason,
 }: Props) {
   // The team whose win button was pressed; the score pop-up is open while this is set.
   const [pendingWinner, setPendingWinner] = useState<0 | 1 | null>(null)
@@ -237,6 +240,8 @@ export function CourtCard({
               <div className="space-y-2 pt-1 text-center">
                 {short ? (
                   <p className="text-sm text-muted-foreground">Fill every spot to start the game.</p>
+                ) : stoppedReason ? (
+                  <p className="text-sm text-muted-foreground">{stoppedReason}</p>
                 ) : (
                   <Button className="h-11 w-full" onClick={() => onStart?.()}>
                     Start game
@@ -274,6 +279,8 @@ export function CourtCard({
             <EmptyTeams perTeam={slotsPerTeam} stacked onFill={canFill ? (team, slot) => setFilling({ team, slot }) : undefined} />
             {readOnly ? (
               <p className="text-sm text-muted-foreground">Waiting for the next game</p>
+            ) : stoppedReason && startState !== 'none' ? (
+              <p className="text-sm text-muted-foreground">{stoppedReason}</p>
             ) : startState === 'ready' ? (
               <>
                 <p className="text-sm text-muted-foreground">

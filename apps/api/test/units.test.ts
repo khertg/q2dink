@@ -225,6 +225,27 @@ describe('migrations', () => {
       'schema_migrations',
       'session_backups',
       'session_history',
+      'session_presence',
+    ])
+    await db.close()
+  })
+
+  it('keep the session a club was running, and its live board, when clubs start running several', async () => {
+    const db = await connectDb('pglite://memory')
+    const before = MIGRATIONS.findIndex((m) => m.id === '010_multi_session')
+    await migrate(db, MIGRATIONS.slice(0, before))
+    await db.query("insert into clubs (slug, name, password_hash, recovery_hash) values ('aaa', 'A', 'x', 'x'), ('bbb', 'B', 'x', 'x')")
+    const id = '00000000-0000-4000-8000-00000000000a'
+    await db.query(`insert into session_backups (club_slug, state, session_id) values ('aaa', '{}', '${id}'), ('bbb', '{}', null)`)
+    await db.query("insert into live_sessions (club_slug, state) values ('aaa', '{}'), ('bbb', '{}')")
+    await migrate(db)
+    const backups = await db.query<{ club_slug: string; session_id: string }>('select club_slug, session_id from session_backups order by club_slug')
+    expect(backups.rows[0].session_id).toBe(id)
+    expect(backups.rows[1].session_id).toMatch(/^[0-9a-f-]{36}$/)
+    const lives = await db.query<{ club_slug: string; session_id: string }>('select club_slug, session_id from live_sessions order by club_slug')
+    expect(lives.rows.map((r) => [r.club_slug, r.session_id])).toEqual([
+      ['aaa', id],
+      ['bbb', backups.rows[1].session_id],
     ])
     await db.close()
   })

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { addCourt, checkIn, openSessionMenu, startGame, recordWin, playerAction } from '../helpers'
+import { addCourt, checkIn, openFromList, openSessionMenu, openSessionsList, startGame, recordWin, playerAction } from '../helpers'
 import {
   apiCreateClub,
   apiLive,
@@ -21,6 +21,7 @@ async function signInAndStart(page: Page, club: TestClub, location = 'Test Sessi
   await uiLogin(page, club)
   await expectSignedIn(page)
   await page.getByLabel('Session name').fill(location)
+  await page.getByRole('button', { name: 'Create session' }).click()
   await page.getByRole('button', { name: 'Start session' }).click()
   await expect(page.getByRole('heading', { name: location })).toBeVisible()
   await goLive(page)
@@ -256,6 +257,7 @@ test.describe('publishing the live session', () => {
     await page.getByRole('button', { name: 'End session' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'End session' }).click()
     await page.getByLabel('Session name').fill('Regulars Again')
+    await page.getByRole('button', { name: 'Create session' }).click()
     await page.getByRole('button', { name: 'Start session' }).click()
     await expect(page.getByRole('heading', { name: 'Regulars Again' })).toBeVisible()
     await goLive(page)
@@ -313,7 +315,7 @@ test.describe('publishing the live session', () => {
     await expect
       .poll(async () => {
         const log = await (await request.get('/api/audit', { headers: bearer(token) })).json()
-        return log.entries.some((e: { kind: string }) => e.kind === 'sessionStarted')
+        return log.entries.some((e: { kind: string }) => e.kind === 'startClock')
       })
       .toBe(true)
 
@@ -332,7 +334,7 @@ test.describe('publishing the live session', () => {
     })
     await page.goto('/')
     await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Start session' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Create session' })).toHaveCount(0)
     await page.waitForTimeout(1000)
     expect(sessionRequests).toEqual([])
     await expect(page.getByRole('status')).toHaveCount(0)
@@ -340,7 +342,7 @@ test.describe('publishing the live session', () => {
 })
 
 test.describe('sharing', () => {
-  test('shows the live link and a QR code', async ({ page, request }) => {
+  test('shows the session’s own live link and a QR code', async ({ page, request }) => {
     const club = uniqueClub('Sharing')
     await apiCreateClub(request, club)
     await signInAndStart(page, club)
@@ -348,7 +350,10 @@ test.describe('sharing', () => {
     await openSessionMenu(page)
     await page.getByRole('button', { name: 'Share live view' }).click()
     const dialog = page.getByRole('dialog')
-    await expect(dialog.getByLabel('Live board link')).toHaveValue(`http://localhost:4174/club/${club.slug}/live`)
+    // The club can run several sessions: from inside one, the link is to its own board.
+    await expect(dialog.getByLabel('Live board link')).toHaveValue(
+      new RegExp(`^http://localhost:4174/club/${club.slug}/live/[0-9a-f-]{36}$`),
+    )
     const qr = dialog.getByRole('img', { name: 'QR code for the live board' })
     await expect(qr).toBeVisible()
     expect(await qr.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0)
@@ -506,6 +511,7 @@ test.describe('managing courts', () => {
     await uiLogin(page, club)
     await expectSignedIn(page)
     await page.getByLabel('Number of courts (1 to 15)').fill('1')
+    await page.getByRole('button', { name: 'Create session' }).click()
     await page.getByRole('button', { name: 'Start session' }).click()
     await goLive(page)
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal'])
@@ -534,7 +540,7 @@ test.describe('joining from another device', () => {
     const other = await second.newPage()
     await other.goto('/')
     await uiLogin(other, club)
-    await other.getByRole('button', { name: /Join .Saved Night./ }).click()
+    await openFromList(other, 'Saved Night', { timeout: 10_000 })
 
     await expect(other.getByRole('heading', { name: 'Saved Night' })).toBeVisible()
     const court = other.getByRole('region', { name: 'Court 1' })
@@ -549,7 +555,7 @@ test.describe('joining from another device', () => {
     await page.goto('/')
     await uiLogin(page, club)
     await expectSignedIn(page)
-    await expect(page.getByRole('button', { name: /^Join/ })).toHaveCount(0)
+    await expect(openSessionsList(page)).toHaveCount(0)
   })
 })
 
@@ -559,6 +565,7 @@ test.describe('club leaderboard', () => {
     await uiLogin(page, club)
     await expectSignedIn(page)
     await page.getByRole('button', { name: 'Singles' }).click()
+    await page.getByRole('button', { name: 'Create session' }).click()
     await page.getByRole('button', { name: 'Start session' }).click()
     await checkIn(page, ['Ann', 'Bob'])
     await startGame(page)

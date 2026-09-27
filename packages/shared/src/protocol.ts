@@ -136,6 +136,8 @@ export interface LiveRow {
    * the private copy (`GET /session/state`); it tells viewers nothing. Missing from older servers.
    */
   revision?: number
+  /** Which of the club's sessions this is. Missing from older servers (one session per club). */
+  sessionId?: string
 }
 
 /**
@@ -179,10 +181,68 @@ export interface ConflictBody extends ErrorBody {
 }
 
 /**
- * Server-Sent Events on /clubs/:slug/live/stream. `revision` carries only the club copy's revision: staff
- * devices follow each other with it even while the session is not live. Viewers ignore it.
+ * Server-Sent Events on /clubs/:slug/live/stream (the club: `revision` and `ended` for every session, for staff
+ * devices, plus `update`/`cleared` for its latest live session, for older viewers) and on
+ * /clubs/:slug/live/:sessionId/stream (one session's board). `revision` carries only the club copy's revision:
+ * staff devices follow each other with it even while the session is not live. Viewers ignore it.
  */
-export type LiveEvent = { type: 'update'; row: LiveRow } | { type: 'cleared' } | { type: 'revision'; revision: number }
+export type LiveEvent =
+  | { type: 'update'; row: LiveRow }
+  | { type: 'cleared'; sessionId?: string }
+  | { type: 'revision'; revision: number; sessionId?: string }
+  /** One of the club's sessions ended (staff devices only; older apps and viewers ignore the event name). */
+  | { type: 'ended'; sessionId: string }
+
+// ---- several sessions per club ------------------------------------------------
+
+/** A running session's state, as lists show it. */
+export type SessionStatus = 'notStarted' | 'paused' | 'running'
+
+/** A staff device, by the id it made for itself and the name staff gave it. */
+export interface DeviceSummary {
+  deviceId: string
+  name: string
+}
+
+/** `GET /sessions` (staff): one of the sessions the club is running. */
+export interface ClubSessionSummary {
+  sessionId: string
+  location: string
+  status: SessionStatus
+  /** On the public live page. */
+  live: boolean
+  revision: number
+  /** ISO time the session was created on its device. */
+  startedAt: string | null
+  updatedAt: string
+  /** Checked in: waiting, playing or on a break. */
+  players: number
+  /** Staff devices that have it open right now (seen within the last minute or so). */
+  openOn: DeviceSummary[]
+  /** While paused: the device that paused it. */
+  pausedBy?: DeviceSummary
+}
+
+export interface SessionsResponse {
+  sessions: ClubSessionSummary[]
+}
+
+/** `GET /clubs/:slug/lives` (public): the club's sessions on the live page. */
+export interface LiveSessionSummary {
+  sessionId: string
+  location: string
+  status: SessionStatus
+  updatedAt: string
+}
+
+export interface LiveSessionsResponse {
+  sessions: LiveSessionSummary[]
+}
+
+/** `PUT /sessions/:id/presence` (staff): this device has the session open. */
+export interface PresenceRequest {
+  deviceId: string
+}
 
 // ---- session history ---------------------------------------------------------
 

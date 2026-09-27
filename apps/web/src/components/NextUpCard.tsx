@@ -9,7 +9,7 @@ import { SkillBadge } from '@/components/SkillBadge'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
 import { TEAM_NAMES } from '@/lib/teams'
-import { useNow } from '@/lib/time'
+import { useSessionNow } from '@/lib/time'
 import type { RosterPlayer } from '@/rotation/types'
 
 interface Props {
@@ -174,7 +174,7 @@ function GroupTeams({
   editable = false,
   queuedAt,
 }: TeamsProps) {
-  const now = useNow()
+  const now = useSessionNow()
   const half = spots.length / 2
   const teams = [spots.slice(0, half), spots.slice(half)]
   return (

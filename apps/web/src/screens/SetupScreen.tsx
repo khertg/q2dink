@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ClubPanel } from '@/components/ClubPanel'
+import { OpenSessionsCard } from '@/components/OpenSessionsCard'
 import { LifetimeLeaderboard } from '@/components/LifetimeLeaderboard'
 import { PastSessionsDialog } from '@/components/PastSessionsDialog'
 import { SavedPlayersDialog } from '@/components/SavedPlayersDialog'
@@ -62,6 +63,9 @@ function SetupCard() {
     <Card>
       <CardHeader>
         <CardTitle>Set up an open play session</CardTitle>
+        <CardDescription>
+          Nothing starts yet: check players in and set up courts first, then press Start session.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -156,7 +160,7 @@ function SetupCard() {
           </div>
 
           <Button type="submit" className="h-11 w-full" disabled={!formValid}>
-            Start session
+            Create session
           </Button>
         </form>
         <div className="mt-2 space-y-1">
@@ -175,6 +179,7 @@ function SetupCard() {
 export function SetupScreen() {
   return (
     <div className="space-y-4">
+      <OpenSessionsCard />
       <SetupCard />
       <ClubPanel />
     </div>

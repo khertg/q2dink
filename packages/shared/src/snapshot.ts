@@ -63,6 +63,10 @@ export interface WirePlayer {
   skill: WireSkill
 }
 
+/** A session that is not simply running. */
+export type WireSessionStatus = 'notStarted' | 'paused'
+const STATUSES: readonly string[] = ['notStarted', 'paused']
+
 export interface PublicSnapshot {
   schemaVersion: typeof SNAPSHOT_VERSION
   location: string
@@ -81,6 +85,11 @@ export interface PublicSnapshot {
    * in board order. `nextUp` is then the first of these. Missing when no court has a range.
    */
   nextUpLanes?: WireNextUpLane[]
+  /**
+   * Set up but not started, or paused (no clock runs). Missing means running, and is what older staff apps
+   * send. An unknown value is dropped.
+   */
+  status?: WireSessionStatus
   onBreak: number[]
   partners: [number, number][]
   stats: Record<number, WireStats>
@@ -231,6 +240,7 @@ function copyPublicSnapshot(s: PublicSnapshot): PublicSnapshot {
           })),
         }
       : {}),
+    ...(typeof s.status === 'string' && STATUSES.includes(s.status) ? { status: s.status } : {}),
     onBreak: [...s.onBreak],
     partners: s.partners.map(([a, b]) => [a, b] as [number, number]),
     stats: Object.fromEntries(

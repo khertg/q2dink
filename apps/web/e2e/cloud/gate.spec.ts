@@ -14,7 +14,7 @@ test.describe('the login gate', () => {
     await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create a club' })).toBeVisible()
     // Nothing of the app behind it.
-    await expect(page.getByRole('button', { name: 'Start session' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Create session' })).toHaveCount(0)
     await expect(page.getByLabel('Session name')).toHaveCount(0)
     await expect(page.getByText('Cloud club')).toHaveCount(0)
   })
@@ -131,6 +131,7 @@ test.describe('the login gate', () => {
     await expect(gate(page)).toHaveCount(0)
     await expectSignedIn(page)
     await page.getByLabel('Session name').fill('No signal')
+    await page.getByRole('button', { name: 'Create session' }).click()
     await page.getByRole('button', { name: 'Start session' }).click()
     await expect(page.getByRole('heading', { name: 'No signal' })).toBeVisible()
   })

@@ -3,7 +3,9 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import {
   createSession,
+  markNotStarted,
   playingIds,
+  sessionStatus,
   setAvgGameMinutes as setAvgGameMinutesEngine,
   setLive as setLiveEngine,
   renamePlayer as renamePlayerEngine,
@@ -22,6 +24,9 @@ import { newBatchId } from '@/cloud/id'
 import { describeAction } from './auditText'
 import type { LifetimeCounts } from '@/rotation/lifetime'
 import { migrateSession, SESSION_STORE_VERSION } from './migrate'
+import { NONE_OPEN, notAppliedAudits, park, unpark, type SessionSlice } from './slices'
+import { deviceRef } from '@/lib/device'
+import { useClubAuth } from '@/cloud/auth'
 
 interface SessionStore {
   location: string
@@ -43,22 +48,47 @@ interface SessionStore {
   /** This device's changes the club has not taken yet, oldest first. Empty while not shared. */
   pending: PendingAction[]
   /**
-   * A session that ended here whose end the club may not have been told yet (the app can close or
-   * reload right after), so the cloud sync ends exactly that one there first. Empty once it is told.
+   * Sessions that ended here whose end the club may not have been told yet (the app can close or
+   * reload right after), so the cloud sync ends exactly those there. Each is removed once it is told.
    */
-  endedSessionId: string
+  endedSessionIds: string[]
+  /**
+   * Sessions staff left without ending, by id, each with its unsent changes. Several sessions can run at
+   * once; only the open one is in the fields above. The sync still sends a parked one's changes.
+   */
+  parked: Record<string, SessionSlice>
   /**
    * The session was renamed here and the club has not taken the new name yet. Until then, a club copy
    * adopted from another device keeps this name rather than bringing the old one back.
    */
   locationPending: boolean
 
+  /**
+   * Create a session and open it, not started: players can be checked in, but no clock runs and no game
+   * starts until startClock. A session already open is left running (parked), not ended.
+   */
   startSession: (
     location: string,
     mode: GameMode,
     courtCount: number,
     options?: SessionOptions,
   ) => void
+  /** Start the open session (Start session): waiting times run from now and games can begin. */
+  startClock: () => void
+  /** Pause the open session: every clock stands still and no game starts until it is resumed. */
+  pauseSession: () => void
+  resumeSession: () => void
+  /**
+   * Leave the open session without ending it: it stays running (or is paused first with `pause`, recorded
+   * as paused because this device left) and can be opened again from the setup screen.
+   */
+  leaveSession: (options: { pause: boolean }) => void
+  /** Open a session left here earlier. The session open now, if any, is left running. */
+  openSession: (sessionId: string) => void
+  /** A parked session's slice after the sync sent or rebased it. */
+  updateParked: (sessionId: string, update: (slice: SessionSlice) => SessionSlice) => void
+  /** Forget a parked session (it ended on another device and was kept in Past sessions). */
+  dropParked: (sessionId: string) => void
   /** Rename the running session. Throws a RangeError with a readable message if the name is not allowed. */
   renameSession: (name: string) => void
   setAvgGameMinutes: (minutes: number) => void
@@ -199,26 +229,60 @@ export const useSessionStore = create<SessionStore>()(
         lifetimeCounted: {},
         base: null,
         pending: [],
-        endedSessionId: '',
+        endedSessionIds: [],
+        parked: {},
         locationPending: false,
 
         startSession: (location, mode, courtCount, options) => {
           const sessionId = newBatchId()
-          set({
+          const now = Date.now()
+          set((state) => ({
+            parked: park(state.parked, state, useClubAuth.getState().club?.slug),
             location,
-            // Not on the public live page until staff choose Go live.
-            session: setLiveEngine(createSession(mode, courtCount, options), false),
+            // Not started (no clock runs) and not on the public live page until staff choose Go live.
+            session: setLiveEngine(markNotStarted(createSession(mode, courtCount, options), now), false),
             previous: null,
             sessionId,
-            startedAt: Date.now(),
+            startedAt: now,
             lifetimeCounted: {},
             base: null,
             pending: [],
             locationPending: false,
-          })
+          }))
           const courts = `${courtCount} court${courtCount === 1 ? '' : 's'}`
-          recordAudit('sessionStarted', `Started “${location}” (${mode === 'doubles' ? 'Doubles' : 'Singles'}, ${courts})`, sessionId)
+          recordAudit('sessionCreated', `Created “${location}” (${mode === 'doubles' ? 'Doubles' : 'Singles'}, ${courts})`, sessionId)
         },
+
+        // Undoing a result across a start or pause would also undo the clock change: the undo is cleared.
+        startClock: () => dispatch({ type: 'startClock', now: Date.now(), by: deviceRef() }, null),
+
+        pauseSession: () => dispatch({ type: 'pause', now: Date.now(), by: deviceRef() }, null),
+
+        resumeSession: () => dispatch({ type: 'resume', now: Date.now(), by: deviceRef() }, null),
+
+        leaveSession: ({ pause }) => {
+          const { session, location, sessionId } = get()
+          if (!session) return
+          const pausing = pause && sessionStatus(session) === 'running'
+          if (pausing) dispatch({ type: 'pause', now: Date.now(), by: { ...deviceRef(), reason: 'left' } }, null)
+          set((state) => ({ parked: park(state.parked, state, useClubAuth.getState().club?.slug), ...NONE_OPEN, previous: null }))
+          recordAudit('sessionLeft', `Left “${location}”${pausing ? ' and paused it' : ' running'}`, sessionId)
+        },
+
+        openSession: (sessionId) => {
+          const slice = get().parked[sessionId]
+          if (!slice || get().sessionId === sessionId) return
+          set((state) => ({ parked: unpark(park(state.parked, state, useClubAuth.getState().club?.slug), sessionId), ...slice, previous: null }))
+          recordAudit('sessionOpened', `Opened “${slice.location}”`, sessionId)
+        },
+
+        updateParked: (sessionId, update) =>
+          set((state) => {
+            const slice = state.parked[sessionId]
+            return slice ? { parked: { ...state.parked, [sessionId]: update(slice) } } : {}
+          }),
+
+        dropParked: (sessionId) => set((state) => ({ parked: unpark(state.parked, sessionId) })),
 
         renameSession: (name) => {
           requireSession(get().session)
@@ -351,9 +415,15 @@ export const useSessionStore = create<SessionStore>()(
         unlockPartners: (playerId) => dispatch({ type: 'unlockPartners', playerId }, null),
 
         loadSession: (location, session, meta) =>
-          set({
+          set((state) => ({
+            // A session open here keeps running; the resumed one takes its place on screen.
+            parked: unpark(park(state.parked, state, useClubAuth.getState().club?.slug), meta?.sessionId ?? ''),
             location,
-            session: meta?.endedAt === undefined ? session : shiftSessionClock(session, Date.now() - meta.endedAt),
+            // A session whose clock stood still when it ended (paused, not started) counts the gap when resumed.
+            session:
+              meta?.endedAt === undefined || session.clockStoppedAt !== undefined
+                ? session
+                : shiftSessionClock(session, Date.now() - meta.endedAt),
             previous: null,
             // Resuming keeps the session's identity, so ending it again updates its history entry.
             sessionId: meta?.sessionId ?? newBatchId(),
@@ -362,7 +432,7 @@ export const useSessionStore = create<SessionStore>()(
             base: null,
             pending: [],
             locationPending: false,
-          }),
+          })),
 
         shareSession: () => {
           const { session, base } = get()
@@ -385,9 +455,7 @@ export const useSessionStore = create<SessionStore>()(
           if (!session) return []
           const rebased = rebase(clubSession, pending)
           // What another device got to first is logged as not done, so the log never claims it happened.
-          const notApplied = rebased.dropped.flatMap(({ audit }) =>
-            audit ? [{ ...audit, kind: `${audit.kind}NotApplied`, summary: `Not applied (changed on another device): ${audit.summary}`.slice(0, 300) }] : [],
-          )
+          const notApplied = notAppliedAudits(rebased.dropped)
           if (notApplied.length > 0) void queueAudit(notApplied)
           set({
             base: { revision, session: clubSession },
@@ -400,7 +468,8 @@ export const useSessionStore = create<SessionStore>()(
         },
 
         joinShared: (location, session, meta, revision) =>
-          set({
+          set((state) => ({
+            parked: unpark(park(state.parked, state, useClubAuth.getState().club?.slug), meta.sessionId),
             location,
             session,
             previous: null,
@@ -410,23 +479,19 @@ export const useSessionStore = create<SessionStore>()(
             base: { revision, session },
             pending: [],
             locationPending: false,
-          }),
+          })),
 
         /** Record which all-time totals this session has now contributed, after saving them. */
         markLifetimeCounted: (counted) => set({ lifetimeCounted: counted }),
 
         endSession: () =>
           set((state) => ({
-            location: '',
-            session: null,
+            ...NONE_OPEN,
             previous: null,
-            sessionId: '',
-            startedAt: 0,
-            lifetimeCounted: {},
-            base: null,
-            pending: [],
-            locationPending: false,
-            endedSessionId: state.session ? state.sessionId : state.endedSessionId,
+            endedSessionIds:
+              state.session && !state.endedSessionIds.includes(state.sessionId)
+                ? [...state.endedSessionIds, state.sessionId]
+                : state.endedSessionIds,
           })),
       }
     },
@@ -434,17 +499,28 @@ export const useSessionStore = create<SessionStore>()(
       name: 'q2dink-session',
       version: SESSION_STORE_VERSION,
       migrate: (persisted, version) => {
-        const saved = persisted as {
+        const { endedSessionId, ...saved } = persisted as {
           location: string
           session: SessionState | null
           sessionId?: string
           startedAt?: number
           lifetimeCounted?: LifetimeCounts
+          endedSessionId?: string
+          endedSessionIds?: string[]
+          parked?: Record<string, SessionSlice>
         }
         // A session already running when history arrived gets an identity now.
         return {
           ...saved,
           session: migrateSession(saved.session, version),
+          // Version 9: several sessions (parked ones), and several ends waiting to reach the club.
+          endedSessionIds: saved.endedSessionIds ?? (endedSessionId ? [endedSessionId] : []),
+          parked: Object.fromEntries(
+            Object.entries(saved.parked ?? {}).map(([id, slice]) => [
+              id,
+              { ...slice, session: migrateSession(slice.session, version) ?? slice.session },
+            ]),
+          ),
           sessionId: saved.sessionId ?? (saved.session ? newBatchId() : ''),
           startedAt: saved.startedAt ?? (saved.session ? Date.now() : 0),
           lifetimeCounted: saved.lifetimeCounted ?? {},
@@ -453,7 +529,7 @@ export const useSessionStore = create<SessionStore>()(
       storage: createJSONStorage(() => localStorage),
       // The undo snapshot only makes sense for a few seconds, so never persist it.
       // `base` and `pending` are kept, so changes made offline still reach the club after a reload.
-      partialize: ({ location, session, sessionId, startedAt, lifetimeCounted, base, pending, endedSessionId, locationPending }) => ({
+      partialize: ({ location, session, sessionId, startedAt, lifetimeCounted, base, pending, endedSessionIds, parked, locationPending }) => ({
         location,
         locationPending,
         session,
@@ -462,7 +538,8 @@ export const useSessionStore = create<SessionStore>()(
         lifetimeCounted,
         base,
         pending,
-        endedSessionId,
+        endedSessionIds,
+        parked,
       }),
     },
   ),

@@ -269,3 +269,17 @@ describe('jsonBytes', () => {
     expect(jsonBytes('é')).toBe(4)
   })
 })
+
+describe('session status on the live page', () => {
+  it('keeps not started or paused, and leaves a running session without one', () => {
+    expect(parsePublicSnapshot({ ...good(), status: 'paused' })?.status).toBe('paused')
+    expect(parsePublicSnapshot({ ...good(), status: 'notStarted' })?.status).toBe('notStarted')
+    expect(parsePublicSnapshot(good())).not.toHaveProperty('status')
+  })
+
+  it('drops a status it does not know rather than refusing the board', () => {
+    const parsed = parsePublicSnapshot({ ...good(), status: 'asleep' })
+    expect(parsed).not.toBeNull()
+    expect(parsed).not.toHaveProperty('status')
+  })
+})

@@ -18,14 +18,16 @@ import { useSessionStore } from '@/store/session'
 
 interface SharePanelProps {
   photoToggle?: boolean
+  /** Share this session's own board rather than the club's (which shows its latest live session, or a choice). */
+  sessionId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function SharePanel({ photoToggle = false, open, onOpenChange }: SharePanelProps) {
+export function SharePanel({ photoToggle = false, sessionId, open, onOpenChange }: SharePanelProps) {
   const club = useClubAuth((s) => s.club)
   const [qr, setQr] = useState<string | null>(null)
-  const url = club ? viewerUrl(club.slug) : ''
+  const url = club ? viewerUrl(club.slug, sessionId) : ''
   // Players opening the link before staff go live see "No game in progress".
   const notLive = useSessionStore((s) => s.session !== null && !isLive(s.session))
 

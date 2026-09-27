@@ -130,7 +130,8 @@ test.describe('data from before the app was renamed', () => {
   test('starts fresh, with nothing to move, on a device that never had the old data', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByText('Set up an open play session')).toBeVisible()
-    expect(await databases(page)).toEqual(['q2dink'])
+    // The database is opened a moment after the first screen shows.
+    await expect.poll(() => databases(page)).toEqual(['q2dink'])
   })
 
   test('a second launch after the move changes nothing', async ({ page, browser, baseURL }) => {

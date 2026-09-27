@@ -19,20 +19,21 @@ vi.mock('@/db/history', async (importActual) => ({
   markHistorySynced: vi.fn(async () => {}),
 }))
 
-import type { HistorySummary, LiveRow, PublishMeta, SessionStateRow } from '@q2dink/shared'
+import type { ClubSessionSummary, HistorySummary, LiveRow, PublishMeta, SessionStateRow } from '@q2dink/shared'
 import { archiveSession } from '@/db/history'
 import { playedMs } from '@/rotation/engine'
 import type { RosterPlayer, SessionState } from '@/rotation/types'
 import { applyAction } from '@/store/actions'
 import { useSessionStore } from '@/store/session'
-import { CloudError, type CloudApi } from './api'
+import { CloudError, type CloudApi, type SubscribeOptions } from './api'
 import { useClubAuth } from './auth'
 import { toFullBackup } from './snapshot'
 import {
   checkLogin,
   flushPendingLifetime,
   joinClubSession,
-  keepMySession,
+  leaveOpenSession,
+  openRunningSession,
   startCloudSync,
   syncMedia,
   useSyncStore,
@@ -43,78 +44,122 @@ const club = { slug: 'downtown', name: 'Downtown', token: 'tok-1' }
 type AsyncMock = ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<void>>>
 
 /**
- * A club server holding one shared session, with revisions like the real one: a write made on an older
- * revision is refused with the club's copy. `server` is what another staff device would change.
+ * A club server running any number of sessions, each with revisions like the real one: a write made on an
+ * older revision is refused with the club's copy. `server.row` is the session written last (what most tests
+ * look at); `otherDevice` is another staff device changing one.
  */
 function fakeApi(
   overrides: { publish?: AsyncMock; clear?: AsyncMock; recordLifetime?: AsyncMock; fetchFullSession?: AsyncMock } = {},
 ) {
-  const server: {
-    row: SessionStateRow | null
-    live: Set<(row: LiveRow | null) => void>
+  const rows = new Map<string, SessionStateRow>()
+  /** Which devices have each session open. */
+  const presence = new Map<string, Set<string>>()
+  let latest: string | null = null
+  const server = {
+    rows,
+    presence,
+    /** The session written last, or null when it ended. Setting it null ends it on the club. */
+    get row(): SessionStateRow | null {
+      return latest ? (rows.get(latest) ?? null) : null
+    },
+    set row(value: SessionStateRow | null) {
+      if (value === null) {
+        if (latest) rows.delete(latest)
+      } else {
+        latest = value.sessionId ?? 'legacy'
+        rows.set(latest, value)
+      }
+    },
+    live: new Set<{ revision: (revision: number, sessionId?: string) => void; ended: (sessionId: string) => void }>(),
     /** The club's ended sessions, or null when the list cannot be fetched. */
-    history: HistorySummary[] | null
-  } = { row: null, live: new Set(), history: [] }
+    history: [] as HistorySummary[] | null,
+  }
   const publish = async (_token: unknown, _snap: unknown, backup: unknown, meta: PublishMeta = {}) => {
-    const stored = server.row
+    const id = meta.sessionId ?? latest ?? 'legacy'
+    const stored = rows.get(id)
     if (meta.baseRevision !== undefined) {
       if (!stored) {
         if (meta.baseRevision > 0) return { conflict: null }
-      } else if (
-        (meta.sessionId && stored.sessionId && stored.sessionId !== meta.sessionId) ||
-        stored.revision !== meta.baseRevision
-      ) {
+      } else if (stored.revision !== meta.baseRevision) {
         return { conflict: stored }
       }
     }
-    server.row = {
+    latest = id
+    rows.set(id, {
       revision: (stored?.revision ?? 0) + 1,
-      sessionId: meta.sessionId ?? stored?.sessionId ?? null,
+      sessionId: id,
       startedAt: meta.startedAt ?? null,
       full: JSON.parse(JSON.stringify(backup)),
-    }
-    return { revision: server.row.revision }
+    })
+    return { revision: rows.get(id)!.revision }
   }
+  const summary = (row: SessionStateRow): ClubSessionSummary => ({
+    sessionId: row.sessionId!,
+    location: (row.full as { location: string }).location,
+    status: 'running',
+    live: false,
+    revision: row.revision,
+    startedAt: row.startedAt,
+    updatedAt: '',
+    players: 0,
+    openOn: [...(presence.get(row.sessionId!) ?? [])].map((deviceId) => ({ deviceId, name: `Device ${deviceId}` })),
+  })
   const api = {
     publish: overrides.publish ?? vi.fn(publish),
     clear:
       overrides.clear ??
-      vi.fn(async () => {
-        server.row = null
+      vi.fn(async (_token: unknown, sessionId?: unknown) => {
+        rows.delete(typeof sessionId === 'string' ? sessionId : (latest ?? ''))
       }),
     recordLifetime:
       overrides.recordLifetime ?? vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
     fetchFullSession: overrides.fetchFullSession ?? vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}),
-    fetchSessionState: vi.fn(async () => server.row),
+    fetchSessionState: vi.fn(async (_token: unknown, sessionId?: string) =>
+      sessionId ? (rows.get(sessionId) ?? null) : server.row,
+    ),
+    listSessions: vi.fn(async () => [...rows.values()].map(summary)),
+    putPresence: vi.fn(async (_token: string, sessionId: string, deviceId: string) => {
+      if (!presence.has(sessionId)) presence.set(sessionId, new Set())
+      presence.get(sessionId)!.add(deviceId)
+    }),
+    dropPresence: vi.fn(async (_token: string, sessionId: string, deviceId: string) => {
+      presence.get(sessionId)?.delete(deviceId)
+    }),
     listHistory: vi.fn(async () => {
       if (!server.history) throw new CloudError('network')
       return server.history
     }),
-    // Like the real stream: every change to the club's copy also comes as a revision signal.
+    // Like the real stream: every change to one of the club's sessions comes as a revision signal, every end as `ended`.
     subscribeLive: vi.fn(
-      (_slug: string, onChange: (row: LiveRow | null) => void, onRevision?: (revision: number) => void) => {
-        const listener = (row: LiveRow | null) => {
-          onChange(row)
-          if (row?.revision !== undefined) onRevision?.(row.revision)
+      (
+        _slug: string,
+        _onChange: (row: LiveRow | null) => void,
+        onRevision?: (revision: number, sessionId?: string) => void,
+        options: SubscribeOptions = {},
+      ) => {
+        const listener = {
+          revision: (revision: number, sessionId?: string) => onRevision?.(revision, sessionId),
+          ended: (sessionId: string) => options.onEnded?.(sessionId),
         }
         server.live.add(listener)
         return () => server.live.delete(listener)
       },
     ),
   }
-  /** Another staff device changes the club's copy, and the live stream says so. */
-  const otherDevice = (change: (session: SessionState) => SessionState, sessionId = server.row?.sessionId ?? null) => {
-    const current = server.row!
+  /** Another staff device changes the club's copy of a session (the one written last unless named), and the stream says so. */
+  const otherDevice = (change: (session: SessionState) => SessionState, sessionId = latest) => {
+    const current = rows.get(sessionId!)!
     const full = current.full as { location: string; session: SessionState }
-    server.row = {
-      ...current,
-      sessionId,
-      revision: current.revision + 1,
-      full: toFullBackup(full.location, change(full.session)),
-    }
-    for (const listener of server.live) listener({ state: {}, updatedAt: '', revision: server.row.revision })
+    const next = { ...current, revision: current.revision + 1, full: toFullBackup(full.location, change(full.session)) }
+    rows.set(sessionId!, next)
+    for (const listener of server.live) listener.revision(next.revision, next.sessionId ?? undefined)
   }
-  return { api, cloudApi: api as unknown as CloudApi, server, otherDevice }
+  /** Another staff device ends a session (the one written last unless named), and the stream says so. */
+  const endElsewhere = (sessionId = latest) => {
+    rows.delete(sessionId!)
+    for (const listener of server.live) listener.ended(sessionId!)
+  }
+  return { api, cloudApi: api as unknown as CloudApi, server, otherDevice, endElsewhere }
 }
 
 const player = (id: number): RosterPlayer => ({ id, name: `P${id}`, skill: 3, gender: 'F' })
@@ -138,9 +183,9 @@ beforeEach(() => {
   const fire = (type: string) => listeners.get(type)?.forEach((fn) => fn())
   ;(globalThis as { fire?: (t: string) => void }).fire = fire
 
-  useSessionStore.setState({ location: '', session: null, previous: null, base: null, pending: [] })
+  useSessionStore.setState({ location: '', session: null, previous: null, base: null, pending: [], parked: {}, endedSessionIds: [] })
   useClubAuth.setState({ club: null, pendingLifetime: [] })
-  useSyncStore.setState({ status: 'off', clubSession: null, otherSession: null, keepMine: false })
+  useSyncStore.setState({ status: 'off', clubSessions: [] })
 })
 
 afterEach(() => {
@@ -307,6 +352,7 @@ describe('startCloudSync', () => {
     const meta = (call: number) => (api.publish.mock.calls[call] as unknown as [unknown, unknown, unknown, { live?: boolean }])[3]
     expect(meta(0).live).toBe(false)
 
+    session().startClock()
     session().setLive(true)
     await vi.advanceTimersByTimeAsync(500)
     expect(meta(1).live).toBe(true)
@@ -407,6 +453,7 @@ describe('startCloudSync', () => {
       useClubAuth.setState({ club })
       const stop = startCloudSync(api.cloudApi)
       session().startSession('Shared', 'doubles', 1)
+      session().startClock()
       session().checkInPlayer(player(1))
       await vi.advanceTimersByTimeAsync(500)
       expect(api.server.row?.revision).toBe(1)
@@ -465,8 +512,7 @@ describe('startCloudSync', () => {
     it('leaves the session when another device ends it', async () => {
       const fake = fakeApi()
       const stop = await started(fake)
-      fake.server.row = null
-      for (const listener of fake.server.live) listener(null)
+      fake.endElsewhere()
       await vi.advanceTimersByTimeAsync(0)
       expect(session().session).toBeNull()
       stop()
@@ -494,7 +540,7 @@ describe('startCloudSync', () => {
 
         // Overnight, then the app opens again and the stream says there is no session.
         vi.setSystemTime(endedAt + 8 * HOUR)
-        for (const listener of fake.server.live) listener(null)
+        for (const listener of fake.server.live) listener.ended(sessionId)
         await vi.advanceTimersByTimeAsync(0)
         stop()
         expect(session().session).toBeNull()
@@ -530,32 +576,13 @@ describe('startCloudSync', () => {
       })
     })
 
-    it('stops sending when another device started a different session, until staff choose', async () => {
-      const fake = fakeApi()
-      const stop = await started(fake)
-      fake.otherDevice((s) => s, '00000000-0000-4000-8000-0000000000ff')
-      await vi.advanceTimersByTimeAsync(0)
-      expect(useSyncStore.getState().otherSession?.sessionId).toBe('00000000-0000-4000-8000-0000000000ff')
-      const sent = fake.api.publish.mock.calls.length
-      session().checkInPlayer(player(5))
-      await vi.advanceTimersByTimeAsync(1000)
-      expect(fake.api.publish.mock.calls.length).toBe(sent)
-
-      // Keep this one: it replaces theirs.
-      keepMySession()
-      await vi.advanceTimersByTimeAsync(1000)
-      expect(fake.server.row!.sessionId).toBe(session().sessionId)
-      expect(useSyncStore.getState().otherSession).toBeNull()
-      stop()
-    })
-
     it('joins the club’s running session, with its identity, and sends nothing until something changes', async () => {
       const fake = fakeApi()
       const stop = await started(fake)
       const row = fake.server.row!
       session().endSession()
       await vi.advanceTimersByTimeAsync(500)
-      fake.server.row = row // still running elsewhere
+      fake.server.rows.set(row.sessionId!, row) // still running elsewhere
 
       expect(joinClubSession(row)).toBe(true)
       expect(session().sessionId).toBe(row.sessionId)
@@ -576,8 +603,7 @@ describe('startCloudSync', () => {
       await vi.advanceTimersByTimeAsync(500)
       expect(fake.api.clear).toHaveBeenCalledWith('tok-1', first)
       expect(fake.server.row?.sessionId).toBe(session().sessionId)
-      expect(useSyncStore.getState().otherSession).toBeNull()
-      expect(session().endedSessionId).toBe('')
+      expect(session().endedSessionIds).toEqual([])
       stop()
     })
 
@@ -601,5 +627,173 @@ describe('startCloudSync', () => {
     session().startSession('Club', 'doubles', 1)
     await vi.advanceTimersByTimeAsync(5000)
     expect(api.publish).not.toHaveBeenCalled()
+  })
+})
+
+describe('several sessions', () => {
+  async function running(_fake: ReturnType<typeof fakeApi>, name = 'Morning') {
+    session().startSession(name, 'doubles', 1)
+    session().startClock()
+    session().checkInPlayer(player(1))
+    await vi.advanceTimersByTimeAsync(500)
+    return session().sessionId
+  }
+
+  it('sends a session left with unsent changes, and keeps it running beside a new one', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const morning = await running(fake)
+    online.value = false
+    session().checkInPlayer(player(2))
+    await leaveOpenSession(fake.cloudApi)
+    expect(session().session).toBeNull()
+    expect(session().parked[morning].pending.length).toBeGreaterThan(0)
+
+    online.value = true
+    fire('online')
+    await vi.advanceTimersByTimeAsync(500)
+    const evening = await running(fake, 'Evening')
+    expect(session().parked[morning].pending).toEqual([])
+    const morningCopy = fake.server.rows.get(morning)!.full as { session: SessionState }
+    expect(morningCopy.session.queue).toHaveLength(2)
+    // Left alone, it was paused on leaving, by this device.
+    expect(morningCopy.session.pausedBy?.reason).toBe('left')
+    expect(fake.server.rows.get(evening)).toBeDefined()
+    expect(fake.api.clear).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('does not pause a session another staff device has open when leaving it', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const id = await running(fake)
+    await fake.api.putPresence('tok-1', id, 'other-phone')
+    const outcome = await leaveOpenSession(fake.cloudApi)
+    expect(outcome.paused).toBe(false)
+    expect(outcome.stillOpenOn.map((d) => d.deviceId)).toEqual(['other-phone'])
+    expect(session().parked[id].session.clockStoppedAt).toBeUndefined()
+    expect(fake.api.dropPresence).toHaveBeenCalledWith('tok-1', id, expect.any(String))
+    stop()
+  })
+
+  it('pauses on leaving when nobody else has it open, and says the club this device left', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const id = await running(fake)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(fake.server.presence.get(id)?.size).toBe(1)
+    const outcome = await leaveOpenSession(fake.cloudApi)
+    expect(outcome).toEqual({ paused: true, stillOpenOn: [] })
+    expect(fake.server.presence.get(id)?.size).toBe(0)
+    stop()
+  })
+
+  it('reopens a session left here with what happened since on other devices', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const id = await running(fake)
+    await fake.api.putPresence('tok-1', id, 'other-phone')
+    await leaveOpenSession(fake.cloudApi)
+    await vi.advanceTimersByTimeAsync(500)
+    fake.otherDevice((s) => applyAction(s, { type: 'checkIn', players: [{ name: 'Bob', skill: 3 }], now: 0 }).session, id)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(await openRunningSession(id, fake.cloudApi)).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(session().session!.queue.map((p) => session().session!.players[p].name)).toEqual(['P1', 'Bob'])
+    stop()
+  })
+
+  it('opens a session another device started, from the club', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const id = await running(fake)
+    const row = fake.server.row!
+    session().endSession()
+    await vi.advanceTimersByTimeAsync(500)
+    fake.server.rows.set(id, row) // still running elsewhere
+    expect(await openRunningSession(id, fake.cloudApi)).toBe(true)
+    expect(session().sessionId).toBe(id)
+    expect(await openRunningSession('00000000-0000-4000-8000-0000000000ff', fake.cloudApi)).toBe(false)
+    stop()
+  })
+
+  it('leaves the open session alone when another session of the club changes', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const first = await running(fake)
+    await leaveOpenSession(fake.cloudApi)
+    await vi.advanceTimersByTimeAsync(500)
+    await running(fake, 'Evening')
+    const before = session().session
+    fake.otherDevice((s) => applyAction(s, { type: 'checkIn', players: [{ name: 'Bob', skill: 3 }], now: 0 }).session, first)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(session().session).toBe(before)
+    stop()
+  })
+
+  it('forgets a parked session the club ended, keeping it in Past sessions', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    const id = await running(fake)
+    await leaveOpenSession(fake.cloudApi)
+    await vi.advanceTimersByTimeAsync(500)
+    vi.mocked(archiveSession).mockClear()
+    fake.endElsewhere(id)
+    // The list is read at most every few seconds.
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(session().parked[id]).toBeUndefined()
+    expect(archiveSession).toHaveBeenCalledTimes(1)
+    stop()
+  })
+})
+
+describe('reading the club’s list of sessions', () => {
+  it('reads it once for a burst of changes, since the club’s devices often share one request budget', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    session().startSession('Busy', 'doubles', 1)
+    session().startClock()
+    await vi.advanceTimersByTimeAsync(6000)
+    const before = fake.api.listSessions.mock.calls.length
+    for (let n = 0; n < 10; n++) fake.otherDevice((s) => ({ ...s, avgGameMinutes: 10 + n }))
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(fake.api.listSessions.mock.calls.length - before).toBe(1)
+    stop()
+  })
+})
+
+describe('a device used for two clubs', () => {
+  it('never sends or ends one club’s left session while the other club is signed in', async () => {
+    const fake = fakeApi()
+    useClubAuth.setState({ club })
+    const stop = startCloudSync(fake.cloudApi)
+    session().startSession('Downtown night', 'doubles', 1)
+    session().startClock()
+    await vi.advanceTimersByTimeAsync(500)
+    const id = session().sessionId
+    online.value = false
+    session().checkInPlayer(player(1))
+    await leaveOpenSession(fake.cloudApi)
+    expect(session().parked[id].clubSlug).toBe('downtown')
+    stop()
+
+    // Another club logs in on this device: its list does not have Downtown's session.
+    const other = fakeApi()
+    online.value = true
+    useClubAuth.setState({ club: { slug: 'uptown', name: 'Uptown', token: 'tok-2' } })
+    const stopOther = startCloudSync(other.cloudApi)
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(other.api.publish).not.toHaveBeenCalled()
+    expect(session().parked[id]).toBeDefined()
+    expect(session().parked[id].pending.length).toBeGreaterThan(0)
+    stopOther()
   })
 })

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { failOnCspViolations } from '../cspWatch'
-import { checkIn, openSessionMenu, startSession } from '../helpers'
+import { checkIn, openFromList, openSessionMenu, startSession } from '../helpers'
 import { apiCreateClub, apiLive, expectSignedIn, goLive, uiLogin, uniqueClub } from './support'
 
 failOnCspViolations(test)
@@ -37,7 +37,7 @@ test('a new session stays off the public page until staff go live, and can be ta
   await pc.goto('/')
   await uiLogin(pc, club)
   await expectSignedIn(pc)
-  await pc.getByRole('button', { name: 'Join “Toggle Night”' }).click(FOLLOW)
+  await openFromList(pc, 'Toggle Night', FOLLOW)
   await checkIn(page, ['Cy'])
   await expect(queued(pc, 'Cy')).toBeVisible(FOLLOW)
 

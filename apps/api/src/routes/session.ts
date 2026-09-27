@@ -11,8 +11,10 @@ import {
   type PutRosterRequest,
   type RecordLifetimeRequest,
   type RenamePlayerRequest,
+  type PresenceRequest,
   type RosterResponse,
   type SessionStateRow,
+  type SessionsResponse,
 } from '@q2dink/shared'
 import type { FastifyInstance } from 'fastify'
 import type { RouteDeps } from '../app'
@@ -30,8 +32,18 @@ import {
 import { recordLifetime, MAX_PLAYERS_PER_BATCH } from '../services/lifetime'
 import { renamePlayer } from '../services/players'
 import { getRoster, putRoster } from '../services/roster'
-import { clearSession, getFullSession, getSessionState, publishSession } from '../services/sessions'
+import {
+  clearSession,
+  dropPresence,
+  getFullSession,
+  getLiveSession,
+  getSessionState,
+  listSessions,
+  publishSession,
+  touchPresence,
+} from '../services/sessions'
 import { authenticate } from './auth'
+import { sessionChannel } from './live'
 
 const publishBody = {
   type: 'object',
@@ -46,6 +58,19 @@ const publishBody = {
     live: { type: 'boolean' },
   },
 } as const
+
+const presenceBody = {
+  type: 'object',
+  required: ['deviceId'],
+  additionalProperties: false,
+  properties: { deviceId: { type: 'string', minLength: 1, maxLength: 64 } },
+} as const
+
+/** A session id from a query string: missing is allowed (older apps mean the latest), malformed is not. */
+function optionalSessionId(raw: string | undefined): string | undefined {
+  if (raw !== undefined && !isHistoryId(raw)) throw new AppError('invalid_request')
+  return raw
+}
 
 const historyBody = {
   type: 'object',
@@ -122,6 +147,15 @@ export function registerSessionRoutes(api: FastifyInstance, { db, config, hub }:
     rateLimit: { max: config.rateLimit.write.max, timeWindow: config.rateLimit.write.windowMs },
   }
 
+  /**
+   * Older viewers follow the club's channel, which shows the club's latest live session: after a session left
+   * the live page, the next latest one (or none).
+   */
+  const tellClubViewers = async (slug: string) => {
+    const latest = await getLiveSession(db, slug, config.liveTtlHours).catch(() => null)
+    hub.publish(slug, latest ? { type: 'update', row: latest } : { type: 'cleared' })
+  }
+
   api.put<{ Body: { public: unknown; full: unknown } & PublishMeta }>(
     '/session',
     { config: write, schema: { body: publishBody } },
@@ -147,36 +181,75 @@ export function registerSessionRoutes(api: FastifyInstance, { db, config, hub }:
         return reply.code(409).send(body)
       }
       // Viewers see the board only while it is live; staff devices follow every change by its revision.
-      if (result.row) hub.publish(slug, { type: 'update', row: result.row })
-      else if (result.wasLive) hub.publish(slug, { type: 'cleared' })
-      hub.publish(slug, { type: 'revision', revision: result.revision })
+      const channel = sessionChannel(slug, result.sessionId)
+      if (result.row) {
+        hub.publish(channel, { type: 'update', row: result.row })
+        hub.publish(slug, { type: 'update', row: result.row })
+      } else if (result.wasLive) {
+        hub.publish(channel, { type: 'cleared', sessionId: result.sessionId })
+        await tellClubViewers(slug)
+      }
+      hub.publish(slug, { type: 'revision', revision: result.revision, sessionId: result.sessionId })
       const response: PublishResponse = { updatedAt: result.updatedAt, revision: result.revision }
       return response
     },
   )
 
-  // The private backup, so another staff device can pick the session up.
-  api.get('/session', async (request) => {
+  // The private backup, so another staff device can pick the session up. With no ?sessionId: the latest.
+  api.get<{ Querystring: { sessionId?: string } }>('/session', async (request) => {
     const { slug } = await authenticate(db, request)
-    const backup = await getFullSession(db, slug)
+    const backup = await getFullSession(db, slug, optionalSessionId(request.query.sessionId))
     if (backup === null) throw new AppError('not_found')
     return backup
   })
 
   // The private copy with its revision, for staff devices running the session together.
-  api.get('/session/state', async (request): Promise<SessionStateRow> => {
+  api.get<{ Querystring: { sessionId?: string } }>('/session/state', async (request): Promise<SessionStateRow> => {
     const { slug } = await authenticate(db, request)
-    const state = await getSessionState(db, slug)
+    const state = await getSessionState(db, slug, optionalSessionId(request.query.sessionId))
     if (!state) throw new AppError('not_found')
     return state
   })
 
-  // With ?sessionId, only that session ends: a device cannot take down one started since elsewhere.
+  // Every session the club is running, and which staff devices have each open.
+  api.get('/sessions', async (request): Promise<SessionsResponse> => {
+    const { slug } = await authenticate(db, request)
+    return { sessions: await listSessions(db, slug) }
+  })
+
+  // This device has the session open (sent every few seconds while it does), or left it.
+  api.put<{ Params: { id: string }; Body: PresenceRequest }>(
+    '/sessions/:id/presence',
+    { schema: { body: presenceBody } },
+    async (request, reply) => {
+      const { slug } = await authenticate(db, request)
+      if (!isHistoryId(request.params.id)) throw new AppError('invalid_request')
+      await touchPresence(db, slug, request.params.id.toLowerCase(), request.body.deviceId)
+      return reply.code(204).send()
+    },
+  )
+
+  api.delete<{ Params: { id: string }; Querystring: { deviceId?: string } }>(
+    '/sessions/:id/presence',
+    async (request, reply) => {
+      const { slug } = await authenticate(db, request)
+      const { deviceId } = request.query
+      if (!isHistoryId(request.params.id) || !deviceId || deviceId.length > 64) throw new AppError('invalid_request')
+      await dropPresence(db, slug, request.params.id.toLowerCase(), deviceId)
+      return reply.code(204).send()
+    },
+  )
+
+  // With ?sessionId, only that session ends: the club's other sessions keep running. Without it (an older
+  // app), the latest one.
   api.delete<{ Querystring: { sessionId?: string } }>('/session', { config: write }, async (request, reply) => {
     const { slug } = await authenticate(db, request)
-    const { sessionId } = request.query
-    if (sessionId !== undefined && !isHistoryId(sessionId)) throw new AppError('invalid_request')
-    if (await clearSession(db, slug, sessionId)) hub.publish(slug, { type: 'cleared' })
+    const ended = await clearSession(db, slug, optionalSessionId(request.query.sessionId))
+    if (ended) {
+      hub.publish(sessionChannel(slug, ended), { type: 'cleared', sessionId: ended })
+      hub.publish(slug, { type: 'ended', sessionId: ended })
+      await tellClubViewers(slug)
+    }
     return reply.code(204).send()
   })
 

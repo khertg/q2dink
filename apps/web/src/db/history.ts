@@ -67,7 +67,8 @@ export async function archiveSession(input: {
   const record: HistoryRecord = {
     id: input.id,
     location: input.location,
-    startedAt: input.startedAt,
+    // When staff pressed Start session, for a session set up before it started.
+    startedAt: session.startedAt ?? input.startedAt,
     endedAt: input.now ?? Date.now(),
     mode: session.mode,
     matchmaking: session.matchmaking,

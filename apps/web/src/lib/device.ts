@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { AuditDevice } from '@q2dink/shared'
 import { newBatchId } from '@/cloud/id'
+import type { DeviceRef } from '@/rotation/types'
 
 /** What Chromium's User-Agent Client Hints say about the device (getHighEntropyValues). */
 export interface DeviceHints {
@@ -87,6 +88,8 @@ interface DeviceStore {
   setLabel: (label: string) => void
 }
 
+const DEVICE_KEY = 'q2dink-device'
+
 export const useDevice = create<DeviceStore>()(
   persist(
     (set) => ({
@@ -97,9 +100,27 @@ export const useDevice = create<DeviceStore>()(
       setName: (name, clubSlug) => set({ name, namedFor: clubSlug }),
       setLabel: (label) => set({ label }),
     }),
-    { name: 'q2dink-device', partialize: ({ id, name, namedFor, label }) => ({ id, name, namedFor, label }) },
+    {
+      name: DEVICE_KEY,
+      storage: createJSONStorage(() => localStorage),
+      partialize: ({ id, name, namedFor, label }) => ({ id, name, namedFor, label }),
+    },
   ),
 )
+
+/**
+ * Save the id made on first launch straight away. The store is only written when it changes, so a device nobody
+ * has named yet (always, in a build with no cloud) would otherwise be a new device after every reload, and take
+ * its own pause for another device's.
+ */
+export function keepDeviceId(storage: Pick<Storage, 'getItem'> | undefined = globalThis.localStorage): void {
+  try {
+    if (storage && storage.getItem(DEVICE_KEY) === null) useDevice.setState((s) => ({ id: s.id }))
+  } catch {
+    // Storage the browser will not let us read: nothing can be kept anyway.
+  }
+}
+keepDeviceId()
 
 /** Work out this device's details once, using client hints where the browser has them. */
 export async function resolveDeviceLabel(): Promise<string> {
@@ -123,4 +144,10 @@ export async function resolveDeviceLabel(): Promise<string> {
 export function currentDevice(): AuditDevice {
   const { id, name, label } = useDevice.getState()
   return { id, label: label ?? deviceLabel(typeof navigator === 'undefined' ? '' : navigator.userAgent), ...(name ? { name } : {}) }
+}
+
+/** This device as a session records who started or paused it: its id, and its name (else its details). */
+export function deviceRef(): DeviceRef {
+  const device = currentDevice()
+  return { deviceId: device.id, name: device.name ?? device.label }
 }

@@ -14,6 +14,7 @@ async function signIn(page: Page, club: TestClub) {
 
 async function startSession(page: Page, location = 'Media Night') {
   await page.getByLabel('Session name').fill(location)
+  await page.getByRole('button', { name: 'Create session' }).click()
   await page.getByRole('button', { name: 'Start session' }).click()
   await expect(page.getByRole('heading', { name: location })).toBeVisible()
   await goLive(page)

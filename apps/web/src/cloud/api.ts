@@ -3,6 +3,7 @@ import type {
   AuditPage,
   AuthGrant,
   ClubDevice,
+  ClubSessionSummary,
   DeletedHistorySummary,
   AvatarIndex,
   ClubRosterPlayer,
@@ -10,6 +11,7 @@ import type {
   HistorySummary,
   LifetimePlayer,
   LiveRow,
+  LiveSessionSummary,
   LoginResponse,
   PublicSnapshot,
   PutAvatarRequest,
@@ -28,6 +30,13 @@ import type {
  */
 export type PublishOutcome = { revision: number } | { conflict: SessionStateRow | null }
 import type { FullBackup } from './snapshot'
+
+export interface SubscribeOptions {
+  /** Follow this session's own board instead of the club's (its latest live session). */
+  sessionId?: string
+  /** Staff devices: one of the club's sessions ended. */
+  onEnded?: (sessionId: string) => void
+}
 
 export type { AvatarIndex, HistorySummary, LifetimePlayer, LiveRow, PutAvatarRequest, PutHistoryRequest }
 
@@ -49,11 +58,20 @@ export interface CloudApi {
    * the club refuses a change made on an older copy and says what it has now (`conflict`).
    */
   publish(token: string, snapshot: PublicSnapshot, backup: FullBackup, meta?: PublishMeta): Promise<PublishOutcome>
-  /** The private backup for resuming on another device, or null if none is running. */
-  fetchFullSession(token: string): Promise<unknown | null>
-  /** The club's private copy with its revision and session id, or null if none is running. */
-  fetchSessionState(token: string): Promise<SessionStateRow | null>
-  /** The session ended. With `sessionId`, only if that is the one running. */
+  /** The private backup for resuming on another device (the latest session without an id), or null. */
+  fetchFullSession(token: string, sessionId?: string): Promise<unknown | null>
+  /**
+   * The club's private copy of a session with its revision and id, or null if it is not running. Without an
+   * id, the club's latest session.
+   */
+  fetchSessionState(token: string, sessionId?: string): Promise<SessionStateRow | null>
+  /** Every session the club is running, with the staff devices that have each open. */
+  listSessions(token: string): Promise<ClubSessionSummary[]>
+  /** This device has the session open (say it again every few seconds while it does). */
+  putPresence(token: string, sessionId: string, deviceId: string): Promise<void>
+  /** This device left the session. */
+  dropPresence(token: string, sessionId: string, deviceId: string): Promise<void>
+  /** The session ended. With `sessionId`, only that one (the club's others keep running). */
   clear(token: string, sessionId?: string): Promise<void>
   /** Add a session's totals to the club leaderboard. Applied once per batch id. */
   recordLifetime(token: string, batchId: string, players: LifetimePlayer[]): Promise<void>
@@ -93,14 +111,24 @@ export interface CloudApi {
   /** Where a player's photo is, at this version. */
   avatarPhotoUrl(slug: string, key: string, version: number): string
 
-  /** The public live board for a club, or null when no session is running. */
-  fetchLive(slug: string): Promise<LiveRow | null>
+  /**
+   * The public live board of one of the club's sessions, or of its latest live one without an id; null when
+   * there is none.
+   */
+  fetchLive(slug: string, sessionId?: string): Promise<LiveRow | null>
+  /** The club's sessions on the public live page, latest first. */
+  listLive(slug: string): Promise<LiveSessionSummary[]>
   fetchClubPlayers(slug: string): Promise<LifetimePlayer[]>
   /**
    * Call `onChange` whenever the board changes (a row) or ends (null). Returns
    * an unsubscribe function. Callers should still poll as a fallback.
    */
-  subscribeLive(slug: string, onChange: (row: LiveRow | null) => void, onRevision?: (revision: number) => void): () => void
+  subscribeLive(
+    slug: string,
+    onChange: (row: LiveRow | null) => void,
+    onRevision?: (revision: number, sessionId?: string) => void,
+    options?: SubscribeOptions,
+  ): () => void
 
   /** Store entries of the audit log. Sending one again stores it once. */
   postAudit(token: string, entries: AuditEntry[]): Promise<void>

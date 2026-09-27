@@ -41,6 +41,8 @@ if [[ "$index" == *'<div id="root">'* ]]; then pass "/ serves the app"; else fai
 live="$(curl -fsS "$BASE/club/some-club/live" 2>/dev/null || true)"
 if [[ "$live" == *'<div id="root">'* ]]; then pass "/club/<name>/live serves the app (client route)"; else fail "/club/<name>/live does not serve the app"; fi
 # The older live link, still on printed QR codes.
+session="$(curl -fsS "$BASE/club/some-club/live/3f2a9c1e-0b4d-4e8f-9a7b-1c2d3e4f5a6b" 2>/dev/null || true)"
+if [[ "$session" == *'<div id="root">'* ]]; then pass "/club/<name>/live/<session> serves the app (one session's board)"; else fail "/club/<name>/live/<session> does not serve the app"; fi
 club="$(curl -fsS "$BASE/club/some-club" 2>/dev/null || true)"
 if [[ "$club" == *'<div id="root">'* ]]; then pass "/club/<name> serves the app (older live link)"; else fail "/club/<name> does not serve the app"; fi
 

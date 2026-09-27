@@ -7,15 +7,14 @@ import {
   slugify,
 } from '@q2dink/shared'
 import { PencilIcon, QrCodeIcon } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { toCloudError } from '@/cloud/api'
 import { useClubAuth } from '@/cloud/auth'
 import { cloud } from '@/cloud/client'
 import { useRecoveryCode } from '@/cloud/recovery'
-import { parseFullBackup } from '@/cloud/snapshot'
 import { recordAudit } from '@/cloud/audit'
-import { flushAudit, joinClubSession, useSyncStore } from '@/cloud/sync'
+import { flushAudit } from '@/cloud/sync'
 import { PhotoSharingToggle } from '@/components/PhotoSharingToggle'
 import { RenameDialog } from '@/components/RenameDialog'
 import { ResetDeviceDialog } from '@/components/ResetDeviceDialog'
@@ -255,9 +254,6 @@ function SignedIn() {
   const signOut = useClubAuth((s) => s.signOut)
   const [shareOpen, setShareOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
-  // The session another staff device has running, kept current by the cloud sync as it changes.
-  const clubSession = useSyncStore((s) => s.clubSession)
-  const running = useMemo(() => (clubSession ? parseFullBackup(clubSession.full) : null), [clubSession])
 
   if (!club) return null
 
@@ -298,21 +294,6 @@ function SignedIn() {
         Live link: <span className="font-mono">{liveBoardPath(club.slug)}</span>
       </p>
       <PhotoSharingToggle />
-      {clubSession && running && (
-        <div className="space-y-1">
-          <Button
-            className="h-11 w-full"
-            onClick={() => {
-              if (!joinClubSession(clubSession)) toast.error('This session could not be opened.')
-            }}
-          >
-            Join “{running.location}”
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Running on another staff device. Join to run it together: changes on either show on both.
-          </p>
-        </div>
-      )}
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={() => setShareOpen(true)}>
           <QrCodeIcon aria-hidden="true" /> Share live view

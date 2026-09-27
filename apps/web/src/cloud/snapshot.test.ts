@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { checkIn, createSession, recordResult, recordScore, setCourtLevels, startGame } from '@/rotation/engine'
+import {
+  checkIn,
+  createSession,
+  markNotStarted,
+  pauseSession,
+  recordResult,
+  recordScore,
+  setCourtLevels,
+  startGame,
+  startSessionClock,
+} from '@/rotation/engine'
 import { fillCourts } from '@/rotation/testing'
 import type { SessionState } from '@/rotation/types'
 import {
@@ -144,5 +154,17 @@ describe('full backup', () => {
     expect(parseFullBackup(null)).toBeNull()
     expect(parseFullBackup({ schemaVersion: 1, location: 'x', storeVersion: 4, session: 'no' })).toBeNull()
     expect(parseFullBackup({ schemaVersion: 9, location: 'x', storeVersion: 4, session: {} })).toBeNull()
+  })
+})
+
+describe('the session clock on the live page', () => {
+  it('says a session is paused or not started, and never which device paused it', () => {
+    const notStarted = markNotStarted(createSession('doubles', 1), 0)
+    expect(toPublicSnapshot('Club', notStarted).status).toBe('notStarted')
+    const running = startSessionClock(notStarted, 1)
+    expect(toPublicSnapshot('Club', running)).not.toHaveProperty('status')
+    const paused = toPublicSnapshot('Club', pauseSession(running, 2, { deviceId: 'd', name: 'Front desk' }))
+    expect(paused.status).toBe('paused')
+    expect(JSON.stringify(paused)).not.toContain('Front desk')
   })
 })

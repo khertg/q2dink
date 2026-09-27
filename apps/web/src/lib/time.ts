@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 /**
  * A duration in hours, minutes and seconds, leaving out every part that is zero: "45s", "7m10s",
@@ -22,4 +22,17 @@ export function useNow(intervalMs = 1_000): number {
     return () => clearInterval(timer)
   }, [intervalMs])
   return now
+}
+
+/**
+ * When the session on screen stopped its clock (not started, or paused), for every timer under it; undefined
+ * while it runs, and on the public viewer.
+ */
+export const SessionClockContext = createContext<number | undefined>(undefined)
+
+/** The session's time: the moment its clock stopped while it stands still, else the current time. */
+export function useSessionNow(intervalMs = 1_000): number {
+  const stoppedAt = useContext(SessionClockContext)
+  const now = useNow(intervalMs)
+  return stoppedAt ?? now
 }

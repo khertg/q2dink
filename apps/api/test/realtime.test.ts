@@ -156,7 +156,8 @@ describe('the live stream', () => {
 
     expect((await publish(app, token, 'Setting up', undefined, { live: false })).statusCode).toBe(200)
     await stream.waitForEvents(2)
-    expect(stream.events[1]).toEqual({ event: 'revision', data: { revision: 1 } })
+    expect(stream.events[1]).toMatchObject({ event: 'revision', data: { revision: 1 } })
+    expect(stream.events[1].data).toHaveProperty('sessionId')
     expect(board(stream.events)).toHaveLength(1) // still only the initial "cleared"
     expect(stream.raw()).not.toContain('Setting up')
     expect((await app.inject({ method: 'GET', url: `/api/clubs/${slug}/live` })).statusCode).toBe(404)
@@ -189,8 +190,10 @@ describe('the live stream', () => {
     await stream.waitForEvents(1)
 
     await app.inject({ method: 'DELETE', url: '/api/session', headers: bearer(token) })
-    await stream.waitForEvents(2)
-    expect(stream.events[1].event).toBe('cleared')
+    await stream.waitForEvents(3)
+    // Staff devices learn which session ended; older viewers see the board cleared.
+    expect(stream.events[1]).toMatchObject({ event: 'ended', data: { sessionId: expect.any(String) } })
+    expect(stream.events[2].event).toBe('cleared')
   })
 
   it('never streams private data', async () => {

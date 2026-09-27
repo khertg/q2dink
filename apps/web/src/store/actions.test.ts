@@ -117,3 +117,51 @@ describe('rebase', () => {
     expect(result.dropped).toHaveLength(1)
   })
 })
+
+describe('the session clock across devices', () => {
+  const MIN = 60_000
+  const A = { deviceId: 'a', name: 'Desk' }
+  const B = { deviceId: 'b', name: 'Phone' }
+  const checkInAt = (now: number, ...names: string[]): SessionAction => ({
+    type: 'checkIn',
+    players: names.map((name) => ({ name, skill: 3 })),
+    now,
+  })
+  const running = apply(createSession('doubles', 1), checkInAt(0, 'Ann', 'Bob', 'Cy', 'Di'))
+
+  it('records what happens while paused at the moment it paused', () => {
+    const s = apply(running, { type: 'pause', now: 10 * MIN, by: A }, checkInAt(30 * MIN, 'Ed'))
+    expect(s.queuedAt?.[5]).toBe(10 * MIN)
+    const resumed = apply(s, { type: 'resume', now: 40 * MIN })
+    expect(resumed.queuedAt?.[5]).toBe(40 * MIN)
+  })
+
+  it('keeps the first pause when two devices pause at once, without dropping the second', () => {
+    const club = apply(running, { type: 'pause', now: 10 * MIN, by: A })
+    const result = rebase(club, [{ action: { type: 'pause', now: 11 * MIN, by: B } }])
+    expect(result.dropped).toEqual([])
+    expect(result.session.pausedBy).toEqual(A)
+    expect(result.session.clockStoppedAt).toBe(10 * MIN)
+  })
+
+  it('keeps the first start when two devices start the session at once, without a warning', () => {
+    const notStarted = { ...apply(createSession('doubles', 1), checkInAt(0, 'Ann')), notStarted: true as const, clockStoppedAt: 0 }
+    const club = apply(notStarted, { type: 'startClock', now: 5 * MIN, by: A })
+    const result = rebase(club, [{ action: { type: 'startClock', now: 6 * MIN, by: B } }])
+    expect(result.dropped).toEqual([])
+    expect(result.session.startedBy).toEqual(A)
+  })
+
+  it('drops a game started here once another device paused, and says why', () => {
+    const club = apply(running, { type: 'pause', now: 10 * MIN, by: A })
+    const result = rebase(club, [{ action: { type: 'startGame', courtId: 1, now: 11 * MIN } }])
+    expect(result.dropped[0].reason).toMatch(/paused/)
+    expect(result.session.courts[0].teams).toBeNull()
+  })
+
+  it('replays changes made offline after another device paused at the club’s pause time', () => {
+    const club = apply(running, { type: 'pause', now: 10 * MIN, by: A })
+    const result = rebase(club, [{ action: checkInAt(25 * MIN, 'Ed'), ids: [5] }])
+    expect(result.session.queuedAt?.[5]).toBe(10 * MIN)
+  })
+})

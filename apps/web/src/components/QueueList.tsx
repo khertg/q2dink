@@ -9,7 +9,7 @@ import { SkillBadge } from '@/components/SkillBadge'
 import { SkillCountPills } from '@/components/SkillCountPills'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
-import { useNow } from '@/lib/time'
+import { useSessionNow } from '@/lib/time'
 import type { SessionState } from '@/rotation/types'
 
 interface Props {
@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function QueueList({ session, nextUp = [], onSkillChange, onTakeBreak, editable = false }: Props) {
-  const now = useNow()
+  const now = useSessionNow()
   return (
     <Card>
       <CardHeader>

@@ -102,3 +102,17 @@ describe('describeAction', () => {
     expect(describeAction(waiting, checkIn('Gus'), apply(waiting, checkIn('Gus'))).kind).toBe('checkIn')
   })
 })
+
+describe('describeAction for the session clock', () => {
+  const desk = { deviceId: 'd', name: 'Desk' }
+
+  it('says the session started, was paused (and why) and resumed', () => {
+    const notStarted = { ...waiting, notStarted: true as const, clockStoppedAt: 0 }
+    expect(say(notStarted, { type: 'startClock', now: 5 })).toBe('Started the session: waiting times run from now')
+    expect(say(waiting, { type: 'pause', now: 5, by: desk })).toBe('Paused the session')
+    expect(say(waiting, { type: 'pause', now: 5, by: { ...desk, reason: 'left' } })).toBe('Paused the session on leaving it')
+    const paused = apply(waiting, { type: 'pause', now: 5, by: desk })
+    expect(say(paused, { type: 'pause', now: 6 })).toBe('Paused the session (it was already paused)')
+    expect(say(paused, { type: 'resume', now: 9 })).toBe('Resumed the session')
+  })
+})

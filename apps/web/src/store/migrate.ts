@@ -6,8 +6,10 @@ import type { SessionState } from '@/rotation/types'
  * session's identity (id, start time, all-time totals already counted) beside the session; that lives
  * in the store's own migrate, not in SessionState. Version 7 added scores and time played to each
  * player's stats. Version 8 added time spent waiting in the queue to each player's stats.
+ * Version 9 added parked sessions and several unsent ends beside the open session (the store's own
+ * migrate); the session clock fields it added to SessionState are optional (missing = running).
  */
-export const SESSION_STORE_VERSION = 8
+export const SESSION_STORE_VERSION = 9
 
 /** Upgrade a session saved by an older build to the current shape. */
 export function migrateSession(

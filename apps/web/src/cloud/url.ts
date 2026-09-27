@@ -1,8 +1,11 @@
-import { clubSlugFromPath, liveBoardPath } from '@q2dink/shared'
+import { clubSlugFromPath, liveBoardPath, liveSessionIdFromPath } from '@q2dink/shared'
 
-/** The public live-board address for a club, which players open from the QR code. */
-export const viewerUrl = (slug: string, origin: string = window.location.origin) =>
-  `${origin}${liveBoardPath(slug)}`
+/**
+ * The public live-board address for a club, which players open from the QR code, or for one of its sessions
+ * (a club can run several at once).
+ */
+export const viewerUrl = (slug: string, sessionId?: string, origin: string = window.location.origin) =>
+  `${origin}${liveBoardPath(slug, sessionId)}`
 
 /**
  * The live-board path to show instead of this one, when it is the older /club/<name> or has a trailing
@@ -11,7 +14,7 @@ export const viewerUrl = (slug: string, origin: string = window.location.origin)
 export function canonicalLiveBoardPath(pathname: string): string | null {
   const slug = clubSlugFromPath(pathname)
   if (slug === null) return null
-  const canonical = liveBoardPath(slug)
+  const canonical = liveBoardPath(slug, liveSessionIdFromPath(pathname) ?? undefined)
   return pathname === canonical ? null : canonical
 }
 

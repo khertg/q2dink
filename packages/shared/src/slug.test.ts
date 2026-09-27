@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clubSlugFromPath, isValidSlug, liveBoardPath, slugify } from './slug'
+import { clubSlugFromPath, isSessionId, isValidSlug, liveBoardPath, liveSessionIdFromPath, slugify } from './slug'
 
 describe('slugify', () => {
   it('makes a lowercase dashed URL name', () => {
@@ -55,5 +55,24 @@ describe('clubSlugFromPath', () => {
     for (const path of ['/', '/club', '/club/', '/clubs/downtown', '/club/a/b', '/club/UP', '/club/x', '/club/a b', '/club/a/live', '/club/UP/live', '/club/downtown/live/extra', '/club/downtown/lives']) {
       expect(clubSlugFromPath(path), path).toBeNull()
     }
+  })
+})
+
+describe('a session’s own live board', () => {
+  const id = '3f2a9c1e-0b4d-4e8f-9a7b-1c2d3e4f5a6b'
+
+  it('has a path under the club’s live board', () => {
+    expect(liveBoardPath('downtown', id)).toBe(`/club/downtown/live/${id}`)
+    expect(liveBoardPath('downtown')).toBe('/club/downtown/live')
+  })
+
+  it('is read back with its club, and anything else is not a session', () => {
+    expect(clubSlugFromPath(`/club/downtown/live/${id}`)).toBe('downtown')
+    expect(liveSessionIdFromPath(`/club/downtown/live/${id}`)).toBe(id)
+    expect(liveSessionIdFromPath(`/club/downtown/live/${id.toUpperCase()}/`)).toBe(id)
+    expect(liveSessionIdFromPath('/club/downtown/live')).toBeNull()
+    expect(liveSessionIdFromPath('/club/downtown/live/not-an-id')).toBeNull()
+    expect(isSessionId(id)).toBe(true)
+    expect(isSessionId('abc')).toBe(false)
   })
 })

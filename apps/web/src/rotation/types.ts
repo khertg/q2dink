@@ -102,7 +102,38 @@ export interface PendingPartners {
   done: number[]
 }
 
+/** A staff device, as the club knows it (its id from lib/device.ts and the name staff gave it). */
+export interface DeviceRef {
+  deviceId: string
+  name: string
+}
+
+/** Who paused the session, and whether it was paused because they left it. */
+export interface PausedBy extends DeviceRef {
+  reason?: 'left'
+}
+
 export interface SessionState {
+  /**
+   * Created but not started: players can be checked in, but no clock runs, no game starts and it cannot
+   * go live until staff press Start session. Missing means started (every session from before this).
+   */
+  notStarted?: true
+  /**
+   * When the session clock stopped (ms since the epoch): when it was created while not started, when it was
+   * paused while paused. Every timestamp an action records while it is set is this time (see sessionNow in
+   * the engine), and starting or resuming shifts the running timers by the stop, so it never counts as
+   * waiting or playing. Missing means the clock is running.
+   */
+  clockStoppedAt?: number
+  /** Which device paused it, while paused. Missing when running, not started, or paused by an older app. */
+  pausedBy?: PausedBy
+  /** When staff pressed Start session (ms since the epoch). Missing for sessions from before this, or not started. */
+  startedAt?: number
+  /** Which device started it. */
+  startedBy?: DeviceRef
+  /** Which device resumed it last, until it is paused again. */
+  resumedBy?: DeviceRef
   mode: GameMode
   /** Assumed length of one game, used for wait estimates. */
   avgGameMinutes: number

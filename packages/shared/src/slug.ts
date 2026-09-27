@@ -20,14 +20,29 @@ export function slugify(name: string): string {
   return base ? `${base}-club` : 'club'
 }
 
-/** The path of a club's public live board, e.g. /club/downtown/live. */
-export const liveBoardPath = (slug: string) => `/club/${slug}/live`
+/**
+ * The path of a club's public live board, e.g. /club/downtown/live, or of one of its sessions,
+ * /club/downtown/live/<session id>, when the club runs several.
+ */
+export const liveBoardPath = (slug: string, sessionId?: string) =>
+  sessionId ? `/club/${slug}/live/${sessionId}` : `/club/${slug}/live`
+
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Whether this is a session id as devices make them (a UUID). */
+export const isSessionId = (id: string) => SESSION_ID.test(id)
+
+/** The session in a live-board path, /club/downtown/live/<session id>. Null for any other path. */
+export function liveSessionIdFromPath(pathname: string): string | null {
+  const match = /^\/club\/[a-z0-9-]+\/live\/([0-9a-fA-F-]+)\/?$/.exec(pathname)
+  return match && isSessionId(match[1]) ? match[1].toLowerCase() : null
+}
 
 /**
  * The club URL name in a live-board path, /club/downtown/live, or the older /club/downtown that
  * printed QR codes still point at. Null for any other path.
  */
 export function clubSlugFromPath(pathname: string): string | null {
-  const match = /^\/club\/([a-z0-9-]+)(?:\/live)?\/?$/.exec(pathname)
+  const match = /^\/club\/([a-z0-9-]+)(?:\/live(?:\/[0-9a-fA-F-]+)?)?\/?$/.exec(pathname)
   return match && isValidSlug(match[1]) ? match[1] : null
 }
