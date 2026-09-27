@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ReplacePlayerDialog } from '@/components/ReplacePlayerDialog'
+import { partnerItem, type PartnerOption } from '@/components/partnerItem'
 import type { RosterPlayer } from '@/rotation/types'
 
 type SwapProps = Omit<ComponentProps<typeof ReplacePlayerDialog>, 'open' | 'onOpenChange' | 'player'> & {
@@ -15,6 +16,7 @@ interface Props extends SwapProps {
   onTakeBreak?: () => void
   /** Take the player out of the session altogether (the caller confirms first). */
   onRemoveFromSession?: () => void
+  partner?: PartnerOption
   /** Why Remove cannot be done right now (it is then shown disabled with this reason). */
   removeBlocked?: string
   /** Why Take a break cannot be done right now. */
@@ -26,12 +28,13 @@ interface Props extends SwapProps {
  * Take a break, Remove from session. Only the last one takes them out of the session; the others keep
  * them in it (in the queue or on a break).
  */
-export function PlayerMenu({ onRemove, onTakeBreak, onRemoveFromSession, removeBlocked, breakBlocked, ...swap }: Props) {
+export function PlayerMenu({ onRemove, onTakeBreak, onRemoveFromSession, partner, removeBlocked, breakBlocked, ...swap }: Props) {
   const [swapping, setSwapping] = useState(false)
   const name = swap.player.name
   const removeLabel = swap.mode === 'nextUp' ? 'Remove from Next up' : 'Remove from court'
   const items = [
     { label: 'Swap…', icon: ArrowRightLeft, onClick: () => setSwapping(true), blocked: undefined, danger: false },
+    ...(partner ? [{ ...partnerItem(partner), blocked: undefined, danger: false }] : []),
     ...(onRemove ? [{ label: removeLabel, icon: UserMinus, onClick: onRemove, blocked: removeBlocked, danger: false }] : []),
     ...(onTakeBreak
       ? [{ label: 'Take a break', icon: Coffee, onClick: onTakeBreak, blocked: breakBlocked, danger: false }]

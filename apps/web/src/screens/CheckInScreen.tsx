@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { AddPlayerForm } from '@/components/AddPlayerForm'
+import { LockPartnerDialog } from '@/components/LockPartnerDialog'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import { RosterCheckIn } from '@/components/RosterCheckIn'
 import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
@@ -31,8 +32,10 @@ import { requestRosterSync } from '@/cloud/sync'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { useSkillEditor } from '@/lib/useSkillEditor'
+import { lockedMessage, lockExplanation } from '@/lib/partners'
 import { removedMessage } from '@/lib/removal'
-import { activeIds, lockStatus, playingIds, type AwayPartner } from '@/rotation/engine'
+import { usePartnerOption } from '@/lib/usePartnerOption'
+import { activeIds, lockStatus, playingIds } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -58,17 +61,10 @@ function PartnersCard({ session }: { session: SessionState }) {
   const status = canLock ? lockStatus(session, a, b) : null
   const name = (id: number) => session.players[id].name
 
-  function whereIs({ id, courtName }: AwayPartner) {
-    return courtName ? `${name(id)} is playing on ${courtName}` : `${name(id)} is on a break`
-  }
-
   function doLock() {
+    const message = lockedMessage(session, a, b)
     lockPartners(a, b)
-    toast(
-      status?.inForce === false
-        ? `${name(a)} and ${name(b)} will be partners once both have finished a game`
-        : `${name(a)} and ${name(b)} are now partners`,
-    )
+    toast(message)
     setFirst('')
     setSecond('')
     setConfirming(false)
@@ -153,13 +149,7 @@ function PartnersCard({ session }: { session: SessionState }) {
                     <DialogTitle>
                       Lock {name(a)} and {name(b)}?
                     </DialogTitle>
-                    <DialogDescription>
-                      {status.away.map(whereIs).join(' and ')}.{' '}
-                      {status.away.length === 1
-                        ? `${name(status.away[0].id === a ? b : a)} keeps their place in line.`
-                        : 'Each keeps their own place in line.'}{' '}
-                      The lock starts once both of them have finished a game.
-                    </DialogDescription>
+                    <DialogDescription>{lockExplanation(session, a, b)}</DialogDescription>
                   </DialogHeader>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setConfirming(false)}>
@@ -182,6 +172,8 @@ export function CheckInScreen({ session }: { session: SessionState }) {
   const checkOutPlayer = useSessionStore((s) => s.checkOutPlayer)
   const removePlayer = useSessionStore((s) => s.removePlayer)
   const [removing, setRemoving] = useState<number | null>(null)
+  const [locking, setLocking] = useState<number | null>(null)
+  const partnerFor = usePartnerOption(session, setLocking)
   const changeSkill = useSkillEditor()
   const clubSlug = useClubAuth((s) => s.club?.slug)
   const roster = useLiveQuery(() => listRoster(clubSlug), [clubSlug])
@@ -254,6 +246,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                     name={session.players[id].name}
                     onTakeBreak={() => checkOutPlayer(id)}
                     onRemoveFromSession={() => setRemoving(id)}
+                    partner={partnerFor?.(id)}
                   />
                 </li>
               ))}
@@ -264,6 +257,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
 
       {session.mode === 'doubles' && <PartnersCard session={session} />}
 
+      <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
       <RemovePlayerDialog session={session} playerId={removing} onClose={() => setRemoving(null)} onConfirm={handleRemove} />
 
       {session.onBreak.length > 0 && (

@@ -9,6 +9,7 @@ import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerD
 import { ScoreDialog } from '@/components/ScoreDialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { PlayerMenu } from '@/components/PlayerMenu'
+import type { PartnerOption } from '@/components/partnerItem'
 import { EmptyTeams, OpenTile, PlayerTile, TeamBox, Versus } from '@/components/PlayerTile'
 import { SkillBadge } from '@/components/SkillBadge'
 import type { SkillLevel } from '@/db/db'
@@ -37,6 +38,8 @@ interface Props {
   onTakeBreak?: (playerId: number) => void
   /** Take a player out of the session altogether (their spot is left open, as with onRemove). */
   onRemoveFromSession?: (playerId: number) => void
+  /** Staff, in doubles: lock or unlock a player's partner from their menu. */
+  partnerFor?: (playerId: number) => PartnerOption | undefined
   /** Put a waiting or resting player in an open spot on a team: on a game missing a player, or to set up an open court. */
   onFill?: (team: 0 | 1, slot: number, playerId: number) => void
   /** Staff only: change a player's skill level from their badge. */
@@ -103,6 +106,7 @@ export function CourtCard({
   onRemove,
   onTakeBreak,
   onRemoveFromSession,
+  partnerFor,
   onFill,
   onSkillChange,
   startState = 'none',
@@ -222,6 +226,7 @@ export function CourtCard({
                             onRemove={onRemove && (() => onRemove(id))}
                             onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
                             onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
+                            partner={partnerFor?.(id)}
                           />
                         )}
                       </PlayerTile>

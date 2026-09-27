@@ -1249,6 +1249,9 @@ export function lockPartners(state: SessionState, a: number, b: number): Session
   if (state.mode !== 'doubles') throw new Error('Partners can only be locked in doubles')
   if (a === b) throw new Error('A player cannot partner themselves')
   if (!state.players[a] || !state.players[b]) throw new Error('Both players must be checked in')
+  // Someone removed from the session stays in `players` for their results, but takes no part any more.
+  const active = activeIds(state)
+  if (!active.includes(a) || !active.includes(b)) throw new Error('Both players must be in the session')
   if (isLocked(state, a) || isLocked(state, b)) throw new Error('A player is already locked with a partner')
 
   if (!lockStatus(state, a, b).inForce) {

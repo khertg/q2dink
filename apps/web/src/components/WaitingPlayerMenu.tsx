@@ -1,5 +1,6 @@
 import { Coffee, MoreVerticalIcon, UserX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { partnerItem, type PartnerOption } from '@/components/partnerItem'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface Props {
@@ -7,11 +8,13 @@ interface Props {
   onTakeBreak?: () => void
   /** Take the player out of the session (the caller confirms first). */
   onRemoveFromSession?: () => void
+  partner?: PartnerOption
 }
 
-/** The ⋮ menu on a waiting player's row (Board queue, Check-in): Take a break, Remove from session. */
-export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession }: Props) {
-  if (!onTakeBreak && !onRemoveFromSession) return null
+/** The ⋮ menu on a waiting player's row (Board queue, Check-in): Lock partner, Take a break, Remove from session. */
+export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, partner }: Props) {
+  if (!onTakeBreak && !onRemoveFromSession && !partner) return null
+  const lock = partner && partnerItem(partner)
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -20,6 +23,14 @@ export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession }: Pr
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-52 p-1">
+        {lock && (
+          <PopoverClose asChild>
+            <Button type="button" variant="ghost" className="w-full justify-start" onClick={lock.onClick}>
+              <lock.icon aria-hidden="true" />
+              {lock.label}
+            </Button>
+          </PopoverClose>
+        )}
         {onTakeBreak && (
           <PopoverClose asChild>
             <Button type="button" variant="ghost" className="w-full justify-start" onClick={onTakeBreak}>

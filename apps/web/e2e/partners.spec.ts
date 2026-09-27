@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { checkIn, choose, recordWin, startGame, startSession, waitingAction } from './helpers'
+import { checkIn, choose, playerAction, recordWin, startGame, startSession, waitingAction } from './helpers'
 
 const NAMES = ['Suzy', 'Ann', 'Bob', 'Cy', 'Tong', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo']
 
@@ -140,5 +140,53 @@ test.describe('locking two players who are both waiting', () => {
     await openLockForm(page, 'Ann', 'Bob')
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByText('Ann and Bob are now partners')).toBeVisible()
+  })
+})
+
+test.describe('locking a partner from a player’s menu', () => {
+  const menuItem = (page: Page, item: string) =>
+    page.locator('[data-slot="popover-content"]').getByRole('button', { name: item })
+  const partnerChoice = (page: Page, name: string) =>
+    page.getByRole('list', { name: 'Possible partners' }).getByRole('button', { name: new RegExp(`^${name}`) })
+
+  test('locks two waiting players from the queue, and unlocks them from the same menu', async ({ page }) => {
+    await startSession(page)
+    await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay'])
+    await startGame(page)
+
+    await page.getByRole('button', { name: 'Eve menu' }).click()
+    await menuItem(page, 'Lock partner…').click()
+    await expect(page.getByRole('dialog', { name: 'Lock a partner for Eve' })).toBeVisible()
+    await partnerChoice(page, 'Fay').click()
+    await expect(page.getByText('Eve and Fay are now partners')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Locked with Fay' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Eve menu' }).click()
+    await menuItem(page, 'Unlock from Fay').click()
+    await expect(page.getByText('Eve and Fay are no longer partners')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Locked with Fay' })).toHaveCount(0)
+  })
+
+  test('from a court, asks first when the lock has to wait, and the Partners card shows it waiting', async ({ page }) => {
+    await suzyPlayingTongNextUp(page)
+    await playerAction(court(page), 'Suzy', 'Lock partner…')
+    await partnerChoice(page, 'Tong').click()
+    const confirm = page.getByRole('dialog', { name: 'Lock Suzy and Tong?' })
+    await expect(confirm).toContainText('Suzy is playing on Court 1')
+    await expect(confirm).toContainText('Tong keeps their place in line')
+    await confirm.getByRole('button', { name: 'Lock anyway' }).click()
+    await expect(page.getByText('Suzy and Tong will be partners once both have finished a game')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Check-in' }).click()
+    await expect(page.getByText('Starts after both have played.')).toBeVisible()
+  })
+
+  test('is not offered in singles', async ({ page }) => {
+    await startSession(page, { mode: 'Singles' })
+    await checkIn(page, ['Ann', 'Bob', 'Cy'])
+    await startGame(page)
+    await page.getByRole('button', { name: 'Cy menu' }).click()
+    await expect(menuItem(page, 'Take a break')).toBeVisible()
+    await expect(menuItem(page, 'Lock partner…')).toHaveCount(0)
   })
 })

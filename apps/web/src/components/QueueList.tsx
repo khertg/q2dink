@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { SkillCountPills } from '@/components/SkillCountPills'
+import type { PartnerOption } from '@/components/partnerItem'
 import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
@@ -21,6 +22,8 @@ interface Props {
   onTakeBreak?: (playerId: number) => void
   /** Staff only: take a player out of the session, from the same menu (the caller confirms first). */
   onRemoveFromSession?: (playerId: number) => void
+  /** Staff, in doubles: lock or unlock a player's partner from the same menu. */
+  partnerFor?: (playerId: number) => PartnerOption | undefined
   /** Staff only: tap a player's avatar to change it. */
   editable?: boolean
 }
@@ -31,6 +34,7 @@ export function QueueList({
   onSkillChange,
   onTakeBreak,
   onRemoveFromSession,
+  partnerFor,
   editable = false,
 }: Props) {
   const now = useSessionNow()
@@ -79,6 +83,7 @@ export function QueueList({
                     name={player.name}
                     onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
                     onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
+                    partner={partnerFor?.(id)}
                   />
                 </li>
               )

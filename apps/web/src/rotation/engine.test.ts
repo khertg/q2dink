@@ -1925,6 +1925,13 @@ describe('removing a player from the session', () => {
     expect(back.stats[1].games).toBe(1)
   })
 
+  it('cannot lock a partner who was removed', () => {
+    let s = startGame(withPlayers(createSession('doubles', 1), 5), 1, { now: 0 })
+    s = recordScore(s, 1, 11, 5, { now: 1000 }).state
+    s = removePlayer(s, 1)
+    expect(() => lockPartners(s, 1, 5)).toThrow('Both players must be in the session')
+  })
+
   it('refuses a player who is not in the session or already left', () => {
     const s = withPlayers(createSession('doubles', 1), 2)
     expect(() => removePlayer(s, 9)).toThrow('not in the session')

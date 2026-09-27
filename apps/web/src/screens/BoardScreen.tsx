@@ -4,6 +4,7 @@ import { CourtCard } from '@/components/CourtCard'
 import { CourtGrid } from '@/components/CourtGrid'
 import { MatchLog } from '@/components/MatchLog'
 import { NextUpCard, type NextUpLane } from '@/components/NextUpCard'
+import { LockPartnerDialog } from '@/components/LockPartnerDialog'
 import { QueueList } from '@/components/QueueList'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import type { Candidate } from '@/components/ReplacePlayerDialog'
@@ -12,6 +13,7 @@ import { playerStatuses } from '@/lib/playerStatus'
 import { removedMessage } from '@/lib/removal'
 import { levelLabel } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
+import { usePartnerOption } from '@/lib/usePartnerOption'
 import { useSkillEditor } from '@/lib/useSkillEditor'
 import { isNextUpPicked, nextGroup, nextGroups, nextUpSpots, nextUpStandIn, sessionStatus, type NextGroup } from '@/rotation/engine'
 import { hasLevelCourts, sameLevels } from '@/rotation/levels'
@@ -34,6 +36,9 @@ export function BoardScreen({ session }: { session: SessionState }) {
   const removePlayer = useSessionStore((s) => s.removePlayer)
   // The player staff chose to remove from the session, while the confirm dialog is open.
   const [removing, setRemoving] = useState<number | null>(null)
+  // The player whose partner is being chosen, while that dialog is open.
+  const [locking, setLocking] = useState<number | null>(null)
+  const partnerFor = usePartnerOption(session, setLocking)
   const editMatch = useSessionStore((s) => s.editMatch)
   const changeSkill = useSkillEditor()
 
@@ -238,6 +243,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
             onRemove={(id) => handleOffCourt(court.id, id, false)}
             onTakeBreak={(id) => handleOffCourt(court.id, id, true)}
             onRemoveFromSession={setRemoving}
+            partnerFor={partnerFor}
             onFill={(team, slot, inId) => handleFill(court.id, team, slot, inId)}
             onSkillChange={changeSkill}
             onScore={(a, b) => handleScore(court.id, a, b)}
@@ -256,6 +262,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         onRemove={(id) => handleOffNextUp(id, false)}
         onTakeBreak={(id) => handleOffNextUp(id, true)}
         onRemoveFromSession={setRemoving}
+        partnerFor={partnerFor}
         removeBlocked={nextUpRemoveBlocked}
         onFillSpot={handleFillNextUp}
         picked={isNextUpPicked(session)}
@@ -271,6 +278,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         onSkillChange={changeSkill}
         onTakeBreak={checkOutPlayer}
         onRemoveFromSession={setRemoving}
+        partnerFor={partnerFor}
         editable
       />
       <MatchLog
@@ -279,6 +287,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
         onEditScore={handleEditScore}
         onEditPlayers={handleEditPlayers}
       />
+      <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
       <RemovePlayerDialog
         session={session}
         playerId={removing}

@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { PlayerMenu } from '@/components/PlayerMenu'
+import type { PartnerOption } from '@/components/partnerItem'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -36,6 +37,8 @@ interface Props {
   onTakeBreak?: (playerId: number) => void
   /** Take a player out of the session altogether (a stand-in takes their spot, as with onRemove). */
   onRemoveFromSession?: (playerId: number) => void
+  /** Staff, in doubles: lock or unlock a player's partner from their menu. */
+  partnerFor?: (playerId: number) => PartnerOption | undefined
   /** Why this player cannot be removed right now (nobody to stand in), or undefined when they can. */
   removeBlocked?: (playerId: number) => string | undefined
   /** Staff only: pin a player into an open spot of a lane's group (spots count Blue, then Orange). */
@@ -71,6 +74,7 @@ type TeamsProps = Pick<
   | 'onRemove'
   | 'onTakeBreak'
   | 'onRemoveFromSession'
+  | 'partnerFor'
   | 'removeBlocked'
   | 'onSkillChange'
   | 'editable'
@@ -173,6 +177,7 @@ function GroupTeams({
   onRemove,
   onTakeBreak,
   onRemoveFromSession,
+  partnerFor,
   removeBlocked,
   onSkillChange,
   editable = false,
@@ -224,6 +229,7 @@ function GroupTeams({
                       onRemove={onRemove && (() => onRemove(id))}
                       onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
                       onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
+                      partner={partnerFor?.(id)}
                       removeBlocked={removeBlocked?.(id)}
                     />
                   )}
