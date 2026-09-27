@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  activeIds,
   addCourt,
+  hasPlayed,
   cancelMatch,
   checkIn,
   checkOut,
@@ -26,6 +28,7 @@ import {
   recordResult,
   recordScore,
   removeFromCourt,
+  removePlayer,
   renameCourt,
   replaceNextUp,
   replacePlayer,
@@ -42,6 +45,7 @@ import {
   startGame,
   unlockPartners,
 } from './engine'
+import { rankPlayers } from './standings'
 import { fillCourts } from './testing'
 import type { RosterPlayer, SessionState } from './types'
 
@@ -1847,5 +1851,83 @@ describe('setPlayerSkill', () => {
     const changed = setPlayerSkill(s, s.courts[0].teams!.flat()[0], 6)
     expect(changed.courts[0].teams).toEqual(teams)
     expect(changed.stats).toEqual(s.stats)
+  })
+})
+
+describe('removing a player from the session', () => {
+  const MIN = 60_000
+
+  it('removes a waiting player who has not played completely', () => {
+    const s = removePlayer(withPlayers(createSession('doubles', 1), 3), 2)
+    expect(s.queue).toEqual([1, 3])
+    expect(s.players[2]).toBeUndefined()
+    expect(s.queuedAt?.[2]).toBeUndefined()
+    expect(activeIds(s)).toEqual([1, 3])
+  })
+
+  it('removes a player on a break', () => {
+    const s = removePlayer(checkOut(withPlayers(createSession('doubles', 1), 3), 3), 3)
+    expect(s.onBreak).toEqual([])
+    expect(s.players[3]).toBeUndefined()
+  })
+
+  it('takes a player off a court: the spot stays open and the game pauses', () => {
+    const s = startGame(withPlayers(createSession('doubles', 1), 6), 1, { now: 0 })
+    const [a] = s.courts[0].teams![0]
+    const t = removePlayer(s, a, 2 * MIN)
+    expect(t.courts[0].teams!.flat()).not.toContain(a)
+    expect(t.courts[0].pausedAt).toBe(2 * MIN)
+    expect(isShort(t.courts[0], t.mode)).toBe(true)
+    expect(activeIds(t)).not.toContain(a)
+    expect(t.queue).not.toContain(a)
+    expect(t.onBreak).not.toContain(a)
+  })
+
+  it('takes a player out of the automatic Next up: the next group forms without them', () => {
+    const s = withPlayers(createSession('doubles', 1), 5)
+    const out = nextGroup(s)!.players[0]
+    const t = removePlayer(s, out)
+    expect(nextGroup(t)!.players).not.toContain(out)
+    expect(t.queue).not.toContain(out)
+  })
+
+  it('puts a stand-in in a picked Next up spot', () => {
+    let s = withPlayers(createSession('doubles', 1), 5)
+    s = fillNextUpSpot(s, 0, 0, 2)
+    const standIn = nextUpStandIn(s, 2)
+    expect(standIn).toBeDefined()
+    const t = removePlayer(s, 2)
+    expect(nextGroup(t)!.players[0]).toBe(standIn)
+    expect(t.players[2]).toBeUndefined()
+  })
+
+  it('ends locks, in force or waiting', () => {
+    let s = withPlayers(createSession('doubles', 1), 4)
+    s = lockPartners(s, 1, 2)
+    s = lockPartners(checkOut(s, 3), 3, 4)
+    expect(s.pendingPartners).toHaveLength(1)
+    s = removePlayer(removePlayer(s, 1), 3)
+    expect(s.partners).toEqual([])
+    expect(s.pendingPartners).toBeUndefined()
+  })
+
+  it('keeps a player who played, so their results still count, and continues them on a new check-in', () => {
+    let s = startGame(withPlayers(createSession('doubles', 1), 4), 1, { now: 0 })
+    s = recordScore(s, 1, 11, 5, { now: 10 * MIN }).state
+    const ranked = rankPlayers(s)
+    expect(hasPlayed(s, 1)).toBe(true)
+    const t = removePlayer(s, 1)
+    expect(t.players[1]).toBeDefined()
+    expect(activeIds(t)).not.toContain(1)
+    expect(rankPlayers(t)).toEqual(ranked)
+    const back = checkIn(t, t.players[1])
+    expect(back.queue).toContain(1)
+    expect(back.stats[1].games).toBe(1)
+  })
+
+  it('refuses a player who is not in the session or already left', () => {
+    const s = withPlayers(createSession('doubles', 1), 2)
+    expect(() => removePlayer(s, 9)).toThrow('not in the session')
+    expect(() => removePlayer(removePlayer(s, 1), 1)).toThrow('not in the session')
   })
 })

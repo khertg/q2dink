@@ -34,6 +34,8 @@ interface Props {
   /** Take a player out of the group (a stand-in takes their spot); they keep their queue place, or go on a break. */
   onRemove?: (playerId: number) => void
   onTakeBreak?: (playerId: number) => void
+  /** Take a player out of the session altogether (a stand-in takes their spot, as with onRemove). */
+  onRemoveFromSession?: (playerId: number) => void
   /** Why this player cannot be removed right now (nobody to stand in), or undefined when they can. */
   removeBlocked?: (playerId: number) => string | undefined
   /** Staff only: pin a player into an open spot of a lane's group (spots count Blue, then Orange). */
@@ -68,6 +70,7 @@ type TeamsProps = Pick<
   | 'onReplace'
   | 'onRemove'
   | 'onTakeBreak'
+  | 'onRemoveFromSession'
   | 'removeBlocked'
   | 'onSkillChange'
   | 'editable'
@@ -169,6 +172,7 @@ function GroupTeams({
   onReplace,
   onRemove,
   onTakeBreak,
+  onRemoveFromSession,
   removeBlocked,
   onSkillChange,
   editable = false,
@@ -219,6 +223,7 @@ function GroupTeams({
                       onReplace={(inId) => onReplace(id, inId)}
                       onRemove={onRemove && (() => onRemove(id))}
                       onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
+                      onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
                       removeBlocked={removeBlocked?.(id)}
                     />
                   )}

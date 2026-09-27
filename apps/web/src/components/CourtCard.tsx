@@ -35,6 +35,8 @@ interface Props {
   onRemove?: (playerId: number) => void
   /** The same, but they go on a break. */
   onTakeBreak?: (playerId: number) => void
+  /** Take a player out of the session altogether (their spot is left open, as with onRemove). */
+  onRemoveFromSession?: (playerId: number) => void
   /** Put a waiting or resting player in an open spot on a team: on a game missing a player, or to set up an open court. */
   onFill?: (team: 0 | 1, slot: number, playerId: number) => void
   /** Staff only: change a player's skill level from their badge. */
@@ -98,6 +100,7 @@ export function CourtCard({
   onReplace,
   onRemove,
   onTakeBreak,
+  onRemoveFromSession,
   onFill,
   onSkillChange,
   startState = 'none',
@@ -228,6 +231,7 @@ export function CourtCard({
                             onReplace={(inId, options) => onReplace(id, inId, options)}
                             onRemove={onRemove && (() => onRemove(id))}
                             onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
+                            onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
                           />
                         )}
                       </PlayerTile>

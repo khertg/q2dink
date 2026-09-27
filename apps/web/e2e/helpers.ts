@@ -7,7 +7,7 @@ export const teamName = (team: 'A' | 'B') => (team === 'A' ? 'Blue' : 'Orange')
  * Open a player's ⋮ menu on a card (a court, or Next up) and choose one of its items. The menu opens
  * in a popover outside the card, so the item is found on the page.
  */
-export async function playerAction(scope: Locator | Page, name: string, item: 'Swap…' | 'Remove' | 'Take a break') {
+export async function playerAction(scope: Locator | Page, name: string, item: 'Swap…' | 'Remove from court' | 'Remove from Next up' | 'Take a break' | 'Remove from session') {
   await scope.getByRole('button', { name: `Options for ${name}` }).click()
   const page = 'page' in scope ? scope.page() : scope
   await page.locator('[data-slot="popover-content"]').getByRole('button', { name: item }).click()

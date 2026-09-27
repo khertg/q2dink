@@ -45,6 +45,10 @@ export function describeAction(before: SessionState, action: SessionAction, afte
     }
     case 'checkOut':
       return say(`${name(action.playerId)} took a break`)
+    case 'removePlayer': {
+      const was = before.courts.find((c) => c.teams?.flat().includes(action.playerId))
+      return say(`Removed ${name(action.playerId)} from the session${was ? ` (off ${was.name}, spot left open)` : ''}`)
+    }
     case 'recordResult':
     case 'recordScore': {
       const teams = courtTeams(action.courtId, before)

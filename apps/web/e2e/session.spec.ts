@@ -223,6 +223,24 @@ test('sends a waiting player on a break from the Board queue\'s menu', async ({ 
   await expect(page.getByRole('listitem').filter({ hasText: 'Eve' }).getByRole('button', { name: 'Back to queue' })).toBeVisible()
 })
 
+test('removes a waiting player from the session from the Board queue\'s menu', async ({ page }) => {
+  await startSession(page)
+  await checkIn(page, FIVE)
+  await startGame(page)
+
+  await expect(page.getByText('Queue (1)')).toBeVisible()
+  await page.getByRole('button', { name: 'Eve menu' }).click()
+  await page.getByRole('button', { name: 'Remove from session' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Remove Eve from the session?' })
+  await dialog.getByRole('button', { name: 'Remove', exact: true }).click()
+  await expect(page.getByText('Eve left the session.')).toBeVisible()
+  await expect(page.getByText('Queue (0)')).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Check-in' }).click()
+  await expect(page.getByText('On a break')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: 'Eve' })).toBeVisible()
+})
+
 test('saves the chosen skill level', async ({ page }) => {
   await startSession(page)
   await page.getByRole('tab', { name: 'Check-in' }).click()

@@ -30,6 +30,13 @@ describe('describeAction', () => {
     expect(say(waiting, { type: 'checkOut', playerId: 5 })).toBe('Eve took a break')
   })
 
+  it('names who was removed from the session, and the court they left', () => {
+    expect(say(waiting, { type: 'removePlayer', playerId: 5, now: 0 })).toBe('Removed Eve from the session')
+    expect(say(playing, { type: 'removePlayer', playerId: blue[0], now: 2000 })).toBe(
+      `Removed ${playing.players[blue[0]].name} from the session (off Court 1, spot left open)`,
+    )
+  })
+
   it('names the court and the players of a game started, won or cancelled', () => {
     expect(say(waiting, { type: 'startGame', courtId: 1, now: 1000 })).toBe(`Court 1: started ${lineUp}`)
     expect(say(playing, { type: 'recordScore', courtId: 1, scoreA: 7, scoreB: 11, now: 2000 })).toBe(

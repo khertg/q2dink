@@ -339,6 +339,43 @@ export function checkOut(state: SessionState, playerId: number): SessionState {
   )
 }
 
+/** Players still taking part: waiting, on a court or on a break (not those removed from the session). */
+export function activeIds(state: SessionState): number[] {
+  return [...state.queue, ...playingIds(state), ...state.onBreak]
+}
+
+/** Whether a player has finished a game in this session (their results are then kept). */
+export function hasPlayed(state: SessionState, playerId: number): boolean {
+  return (state.matches ?? []).some((m) => m.teams.flat().includes(playerId)) || (state.stats[playerId]?.games ?? 0) > 0
+}
+
+/**
+ * Take a player out of the session: off a court (their spot is left open and the game pauses, as with
+ * removeFromCourt), out of Next up (a stand-in takes their spot, as with dropFromNextUp), out of the queue
+ * or off a break. Their partner locks end. Someone who has played stays in `players` so their results
+ * still count, and checking them in again continues them; someone who has not is removed completely.
+ */
+export function removePlayer(state: SessionState, playerId: number, now?: number): SessionState {
+  if (!state.players[playerId] || !activeIds(state).includes(playerId)) {
+    throw new Error(`Player ${playerId} is not in the session`)
+  }
+  const court = courtWithPlayer(state, playerId)
+  let off: SessionState
+  if (court) off = removeFromCourt(state, court.id, playerId, { onBreak: true, now })
+  else if (groupWith(state, playerId) || pinsOf(state).includes(playerId)) off = dropFromNextUp(state, playerId, { onBreak: true })
+  else off = checkOut(state, playerId)
+  const gone = withoutQueuedAt(
+    withoutLocks({ ...off, onBreak: off.onBreak.filter((id) => id !== playerId) }, [playerId]),
+    [playerId],
+  )
+  if (hasPlayed(state, playerId)) return gone
+  const players = { ...gone.players }
+  delete players[playerId]
+  const stats = { ...gone.stats }
+  delete stats[playerId]
+  return { ...gone, players, stats }
+}
+
 /** The group that would play next, already split into teams. */
 export interface NextGroup {
   /** Team A first, then Team B. */

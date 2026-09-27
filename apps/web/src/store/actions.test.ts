@@ -26,6 +26,21 @@ describe('session player ids', () => {
     expect(s.queue).toEqual([1])
     expect(Object.keys(s.players)).toEqual(['1'])
   })
+
+  it('give a removed player who never played no id, so the next check-in can take it', () => {
+    const s = apply(createSession('doubles', 1), checkIn('Ann', 'Bob'), { type: 'removePlayer', playerId: 2, now: 0 })
+    expect(Object.keys(s.players)).toEqual(['1'])
+    expect(sessionIdFor(s, 'Cy')).toBe(2)
+  })
+
+  it('bring back a removed player who played under the id they had', () => {
+    let s = apply(createSession('doubles', 1), checkIn('Ann', 'Bob', 'Cy', 'Dee'), { type: 'startGame', courtId: 1, now: 0 })
+    s = apply(s, { type: 'recordScore', courtId: 1, scoreA: 11, scoreB: 4, now: 1000 }, { type: 'removePlayer', playerId: 1, now: 2000 })
+    expect(s.queue).not.toContain(1)
+    s = apply(s, checkIn('ann'))
+    expect(s.queue).toContain(1)
+    expect(s.stats[1].games).toBe(1)
+  })
 })
 
 describe('rebase', () => {
@@ -96,6 +111,20 @@ describe('rebase', () => {
     const result = rebase(playing, pending)
     expect(result.dropped).toEqual([])
     expect(result.session.courts[0].teams![0]).toEqual([5, second])
+  })
+
+  it('renumbers a removed player after a check-in got a different id, and drops a remove done elsewhere', () => {
+    const club = apply(base, checkIn('Zed'))
+    const pending: PendingAction[] = [
+      { action: checkIn('Bob'), ids: [2] },
+      { action: { type: 'removePlayer', playerId: 2, now: 0 } },
+    ]
+    const result = rebase(club, pending)
+    expect(result.dropped).toEqual([])
+    expect(names(result.session)).toEqual(['Ann', 'Zed'])
+    const removed = apply(base, { type: 'removePlayer', playerId: 1, now: 0 })
+    const again = rebase(removed, [{ action: { type: 'removePlayer', playerId: 1, now: 0 } }])
+    expect(again.dropped[0].reason).toMatch(/not in the session/)
   })
 
   it('drops a change that no longer applies, and says why', () => {

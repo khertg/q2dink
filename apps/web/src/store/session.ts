@@ -103,6 +103,8 @@ interface SessionStore {
   /** Check several players in at once, in the order given. Returns how many were newly checked in. */
   checkInPlayers: (players: RosterPlayer[]) => number
   checkOutPlayer: (playerId: number) => void
+  /** Take a player out of the session, from the queue, a break, Next up or a court. */
+  removePlayer: (playerId: number) => void
   recordResult: (courtId: number, winner: 0 | 1) => void
   /**
    * Record a game from its score (Team A, then Team B); the higher score wins. Throws a RangeError
@@ -348,6 +350,7 @@ export const useSessionStore = create<SessionStore>()(
         },
 
         checkOutPlayer: (playerId) => dispatch({ type: 'checkOut', playerId }, null),
+        removePlayer: (playerId) => dispatch({ type: 'removePlayer', playerId, now: Date.now() }, null),
 
         recordResult: (courtId, winner) =>
           dispatch({ type: 'recordResult', courtId, winner, now: Date.now() }, requireSession(get().session)),

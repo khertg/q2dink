@@ -10,6 +10,7 @@ import { SkillBadge } from '@/components/SkillBadge'
 import { requestRosterSync } from '@/cloud/sync'
 import { setRosterSkill } from '@/db/roster'
 import { skillLabel } from '@/lib/skill'
+import { activeIds } from '@/rotation/engine'
 import type { RosterPlayer, SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -31,9 +32,10 @@ export function RosterCheckIn({ session, roster }: Props) {
   const [selected, setSelected] = useState<number[]>([])
 
   const genderRequired = session.mode === 'doubles' && session.matchmaking === 'mixed'
-  // Anyone already in this session (waiting, playing or on a break) is handled elsewhere. Matched by
-  // name: the session's ids are its own, shared by every staff device, not this device's roster ids.
-  const inSession = new Set(Object.values(session.players).map((p) => p.name.trim().toLowerCase()))
+  // Anyone already in this session (waiting, playing or on a break) is handled elsewhere; someone removed
+  // from it can be checked in again. Matched by name: the session's ids are its own, shared by every
+  // staff device, not this device's roster ids.
+  const inSession = new Set(activeIds(session).map((id) => session.players[id]?.name.trim().toLowerCase()))
   const available = (roster ?? []).filter((p) => p.id !== undefined && !inSession.has(p.name.trim().toLowerCase()))
   const needle = query.trim().toLowerCase()
   const shown = available.filter((p) => p.name.toLowerCase().includes(needle))

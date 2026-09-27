@@ -285,13 +285,13 @@ test.describe('the player menu: Remove and Take a break', () => {
   const menuItem = (page: Page, item: string) =>
     page.locator('[data-slot="popover-content"]').getByRole('button', { name: item })
 
-  test('Remove on a court leaves the spot open, pauses the game, and puts the player first in the queue', async ({
+  test('Remove from court leaves the spot open, pauses the game, and puts the player first in the queue', async ({
     page,
   }) => {
     await startSession(page)
     await checkIn(page, SIX)
     await startGame(page)
-    await playerAction(court(page), 'Ann', 'Remove')
+    await playerAction(court(page), 'Ann', 'Remove from court')
     await expect(
       page.getByText('Ann is off Court 1 and first in the queue. The game is paused until the spot is filled.'),
     ).toBeVisible()
@@ -318,7 +318,7 @@ test.describe('the player menu: Remove and Take a break', () => {
     await startSession(page)
     await checkIn(page, SIX)
     await startGame(page)
-    await playerAction(court(page), 'Ann', 'Remove')
+    await playerAction(court(page), 'Ann', 'Remove from court')
     await court(page).getByRole('button', { name: 'Fill open spot on Blue' }).click()
     const dialog = page.getByRole('dialog', { name: 'Fill the open spot · Court 1, Blue' })
     // Only people waiting or on a break can fill it; players on courts are not offered.
@@ -336,18 +336,18 @@ test.describe('the player menu: Remove and Take a break', () => {
     await startSession(page)
     await checkIn(page, SIX)
     await startGame(page)
-    await playerAction(court(page), 'Ann', 'Remove')
+    await playerAction(court(page), 'Ann', 'Remove from court')
     await court(page).getByRole('button', { name: 'Court menu' }).click()
     await page.getByRole('button', { name: 'Cancel game' }).click()
     await page.getByRole('dialog', { name: 'Cancel this game?' }).getByRole('button', { name: 'Cancel game' }).click()
     await expect(court(page).getByText('Open', { exact: true })).toBeVisible()
   })
 
-  test('Remove in Next up brings in the next waiting player in the same spot, and the others stay put', async ({ page }) => {
+  test('Remove from Next up brings in the next waiting player in the same spot, and the others stay put', async ({ page }) => {
     await startSession(page)
     await checkIn(page, SIX)
     const before = await nextUpTeams(page)
-    await playerAction(nextUp(page), before[0][0], 'Remove')
+    await playerAction(nextUp(page), before[0][0], 'Remove from Next up')
     await expect(page.getByText(`Eve is next up instead of ${before[0][0]}.`)).toBeVisible()
     expect(await nextUpTeams(page)).toEqual([['Eve', before[0][1]], before[1]])
     expect(await queueNames(page)).toEqual(SIX) // they keep their place in the queue
@@ -364,18 +364,18 @@ test.describe('the player menu: Remove and Take a break', () => {
     expect(await queueNames(page)).not.toContain(out)
   })
 
-  test('Remove in Next up is unavailable when nobody can stand in; on a court it always is', async ({ page }) => {
+  test('Remove from Next up is unavailable when nobody can stand in; on a court it always is', async ({ page }) => {
     await startSession(page)
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee'])
     await nextUp(page).getByRole('button', { name: 'Options for Ann' }).click()
-    await expect(menuItem(page, 'Remove')).toBeDisabled()
-    await expect(menuItem(page, 'Remove')).toContainText('No one else is waiting to take their spot')
+    await expect(menuItem(page, 'Remove from Next up')).toBeDisabled()
+    await expect(menuItem(page, 'Remove from Next up')).toContainText('No one else is waiting to take their spot')
     await expect(menuItem(page, 'Take a break')).toBeEnabled() // from Next up, a break is always possible
     await page.keyboard.press('Escape')
 
     await startGame(page)
     await court(page).getByRole('button', { name: 'Options for Ann' }).click()
-    await expect(menuItem(page, 'Remove')).toBeEnabled() // it leaves the spot open
+    await expect(menuItem(page, 'Remove from court')).toBeEnabled() // it leaves the spot open
     await expect(menuItem(page, 'Take a break')).toBeEnabled()
     await expect(menuItem(page, 'Swap…')).toBeEnabled()
   })
@@ -433,7 +433,7 @@ test.describe('open spots', () => {
     await checkIn(page, SIX)
     await startGame(page)
     const [top, bottom] = await spots(page, 'Blue')
-    await playerAction(court(page), top!, 'Remove')
+    await playerAction(court(page), top!, 'Remove from court')
     await expect.poll(() => spots(page, 'Blue')).toEqual([null, bottom])
     await court(page).getByRole('button', { name: 'Fill open spot on Blue' }).click()
     await page.getByRole('dialog').getByRole('button', { name: /Fay/ }).click()
@@ -491,5 +491,37 @@ test.describe('open spots', () => {
     expect(won.height).toBeLessThanOrEqual(40)
     expect(won.y).toBeGreaterThan(lastPlayer.y + lastPlayer.height - 1) // below the players
     expect(won.width).toBeGreaterThan(box.width - 24) // across the box
+  })
+})
+
+test.describe('removing a player from the session', () => {
+  const confirmRemove = async (page: Page, name: string) => {
+    const dialog = page.getByRole('dialog', { name: `Remove ${name} from the session?` })
+    await dialog.getByRole('button', { name: 'Remove', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+  }
+
+  test('from the Check-in list: they leave the queue and can be checked in again from the roster', async ({ page }) => {
+    await startSession(page)
+    await checkIn(page, SIX)
+    await page.getByRole('tab', { name: 'Check-in' }).click()
+    await page.getByRole('button', { name: 'Remove Fay from the session' }).click()
+    await expect(page.getByRole('dialog')).toContainText('They can be checked in again later.')
+    await confirmRemove(page, 'Fay')
+    await expect(page.getByText('Fay left the session.')).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Fay' })).toBeVisible()
+    await page.getByRole('tab', { name: 'Board' }).click()
+    expect(await queueNames(page)).not.toContain('Fay')
+  })
+
+  test('from a court: their spot is left open and the game pauses', async ({ page }) => {
+    await startSession(page)
+    await checkIn(page, SIX)
+    await startGame(page)
+    await playerAction(court(page), 'Ann', 'Remove from session')
+    await confirmRemove(page, 'Ann')
+    await expect(page.getByText('Ann left the session. The game on Court 1 is paused until the spot is filled.')).toBeVisible()
+    await expect(court(page).getByRole('button', { name: 'Fill open spot on Blue' })).toBeVisible()
+    expect(await queueNames(page)).not.toContain('Ann')
   })
 })

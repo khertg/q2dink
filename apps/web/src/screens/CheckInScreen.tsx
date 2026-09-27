@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Lock } from 'lucide-react'
+import { Lock, UserX } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { AddPlayerForm } from '@/components/AddPlayerForm'
+import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import { RosterCheckIn } from '@/components/RosterCheckIn'
 import {
   Select,
@@ -29,7 +30,8 @@ import { requestRosterSync } from '@/cloud/sync'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { useSkillEditor } from '@/lib/useSkillEditor'
-import { lockStatus, playingIds, type AwayPartner } from '@/rotation/engine'
+import { removedMessage } from '@/lib/removal'
+import { activeIds, lockStatus, playingIds, type AwayPartner } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
@@ -44,7 +46,10 @@ function PartnersCard({ session }: { session: SessionState }) {
 
   const pending = session.pendingPartners ?? []
   const locked = new Set([...session.partners.flat(), ...pending.flatMap(({ pair }) => pair)])
-  const available = Object.values(session.players).filter((p) => !locked.has(p.id))
+  // Players removed from the session stay in `players` for their results, but cannot be locked.
+  const available = activeIds(session)
+    .map((id) => session.players[id])
+    .filter((p) => p && !locked.has(p.id))
 
   const a = Number(first)
   const b = Number(second)
@@ -174,6 +179,8 @@ function PartnersCard({ session }: { session: SessionState }) {
 export function CheckInScreen({ session }: { session: SessionState }) {
   const checkInPlayer = useSessionStore((s) => s.checkInPlayer)
   const checkOutPlayer = useSessionStore((s) => s.checkOutPlayer)
+  const removePlayer = useSessionStore((s) => s.removePlayer)
+  const [removing, setRemoving] = useState<number | null>(null)
   const changeSkill = useSkillEditor()
   const clubSlug = useClubAuth((s) => s.club?.slug)
   const roster = useLiveQuery(() => listRoster(clubSlug), [clubSlug])
@@ -191,6 +198,25 @@ export function CheckInScreen({ session }: { session: SessionState }) {
   }
 
   const playing = playingIds(session).length
+
+  function handleRemove(id: number) {
+    const message = removedMessage(session, id)
+    removePlayer(id)
+    toast(message)
+  }
+
+  const removeButton = (id: number) => (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-destructive hover:text-destructive"
+      aria-label={`Remove ${session.players[id].name} from the session`}
+      title="Remove from session"
+      onClick={() => setRemoving(id)}
+    >
+      <UserX aria-hidden="true" />
+    </Button>
+  )
 
   return (
     <div className="space-y-4">
@@ -226,6 +252,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                   <Button variant="outline" size="sm" onClick={() => checkOutPlayer(id)}>
                     Take a break
                   </Button>
+                  {removeButton(id)}
                 </li>
               ))}
             </ul>
@@ -234,6 +261,8 @@ export function CheckInScreen({ session }: { session: SessionState }) {
       </Card>
 
       {session.mode === 'doubles' && <PartnersCard session={session} />}
+
+      <RemovePlayerDialog session={session} playerId={removing} onClose={() => setRemoving(null)} onConfirm={handleRemove} />
 
       {session.onBreak.length > 0 && (
         <Card>
@@ -252,6 +281,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                   <Button variant="outline" size="sm" onClick={() => checkInPlayer(session.players[id])}>
                     Back to queue
                   </Button>
+                  {removeButton(id)}
                 </li>
               ))}
             </ul>

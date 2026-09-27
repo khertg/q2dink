@@ -18,6 +18,7 @@ import {
   renameCourt,
   setCourtLevels,
   removeFromCourt,
+  removePlayer,
   renamePlayer,
   replaceNextUp,
   replacePlayer,
@@ -50,6 +51,8 @@ export type SessionAction =
   | { type: 'renamePlayer'; playerId: number; name: string }
   | { type: 'checkIn'; players: CheckInPlayer[]; now: number }
   | { type: 'checkOut'; playerId: number }
+  /** Take a player out of the session, from wherever they are (see removePlayer). */
+  | { type: 'removePlayer'; playerId: number; now: number }
   | { type: 'recordResult'; courtId: number; winner: 0 | 1; now: number }
   | { type: 'recordScore'; courtId: number; scoreA: number; scoreB: number; now: number }
   | { type: 'editMatch'; matchIndex: number; edit: MatchEdit }
@@ -142,6 +145,8 @@ function applyChange(session: SessionState, action: SessionAction): Applied {
     }
     case 'checkOut':
       return { session: checkOut(session, action.playerId) }
+    case 'removePlayer':
+      return { session: removePlayer(session, action.playerId, action.now) }
     case 'recordResult':
       return { session: recordResult(session, action.courtId, action.winner, { now: action.now }).state }
     case 'recordScore':
@@ -207,6 +212,7 @@ export function remapAction(action: SessionAction, map: Map<number, number>): Se
     case 'setPlayerSkill':
     case 'renamePlayer':
     case 'checkOut':
+    case 'removePlayer':
     case 'unlockPartners':
     case 'dropFromNextUp':
     case 'removeFromCourt':
