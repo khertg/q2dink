@@ -1,5 +1,16 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
+import {
+  addCardLogo,
+  dropCardLogos,
+  getCardLogoChoice,
+  markCardLogoSent,
+  removeCardLogo,
+  setCardLogoChoice,
+  storeClubChoice,
+  storeClubLogo,
+  unsentCardLogos,
+} from '@/db/cardLogos'
 import { db } from '@/db/db'
 import { archiveSession, markDeletionSent, markHistorySynced, pendingDeletions, unsyncedHistory } from '@/db/history'
 import {
@@ -38,6 +49,7 @@ import {
   setSyncClub,
 } from '@/db/settings'
 import { avatarKey, colorFor, dataUrlBase64, type PlayerAvatar } from '@/lib/avatar'
+import { mergeCardLogos, sameChoice } from '@/lib/cardLogos'
 import { NOTHING_UNSENT, type UnsentCounts } from '@/lib/reset'
 import { useDevice } from '@/lib/device'
 import { otherDevicesOpen, statusChangeMessage } from '@/lib/pause'
@@ -45,6 +57,7 @@ import { isLive, lastActivityAt, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { openBelongsTo, useSessionStore } from '@/store/session'
 import { belongsTo, confirmSlice, notAppliedAudits, parkedFor, parkedUnsent, rebaseSlice, sliceOf, type SessionSlice } from '@/store/slices'
+import type { CardLogoChoice } from '@q2dink/shared'
 import { CloudError, type CloudApi, type PutAvatarRequest } from './api'
 import { dropAuditOfOtherClubs, onAuditQueued, queueAudit, recordAudit, removeSentAudit, unsentAudit } from './audit'
 import { useClubAuth } from './auth'
@@ -242,6 +255,7 @@ async function runSync(api: CloudApi): Promise<void> {
     syncHistory(api),
     syncMedia(api),
     syncSkillScale(api),
+    syncCardLogos(api),
     renamed ? exchangeRoster(api) : Promise.resolve(false),
   ])
 }
@@ -285,6 +299,81 @@ export function saveClubSkillScale(scale: SkillScale | null, api: CloudApi | nul
 }
 
 /**
+ * The club's card logos (its logo in several colours, for the share images) and which one the cards use. Changes made
+ * here go up first (added, removed, the choice); then the club's list comes down: logos this device lacks or has an
+ * older version of are fetched, ones the club no longer has are dropped, and the club's choice is taken unless one
+ * made here is still unsent. Returns false when the club could not be reached.
+ */
+export async function syncCardLogos(api: CloudApi | null = cloud): Promise<boolean> {
+  const club = useClubAuth.getState().club
+  if (!api || !club) return false
+  const { slug, token } = club
+  const stillClub = () => useClubAuth.getState().club?.slug === slug
+  try {
+    for (const row of await unsentCardLogos(slug)) {
+      if (row.dirty === 'delete') await api.deleteCardLogo(token, row.id)
+      else await api.putCardLogo(token, row.id, dataUrlBase64(row.data), row.tone)
+      await markCardLogoSent(row)
+    }
+    const local = await getCardLogoChoice(slug)
+    if (local.dirty) {
+      try {
+        await api.putCardLogoChoice(token, local.choice)
+      } catch (error) {
+        // The picked logo was removed on another device meanwhile: the club's choice stands.
+        if (!(error instanceof CloudError && error.code === 'invalid_request')) throw error
+      }
+      const now = await getCardLogoChoice(slug)
+      if (stillClub() && sameChoice(now.choice, local.choice)) await storeClubChoice(slug, local.choice)
+    }
+    const index = await api.fetchCardLogoIndex(token)
+    if (!stillClub()) return true
+    const versions = new Map(index.logos.map((logo) => [logo.id, logo.v]))
+    const here = await db.cardLogos.filter((row) => row.clubSlug === slug).toArray()
+    // Sent from here: the club's version is now known without fetching the image back.
+    for (const row of here) {
+      const v = versions.get(row.id)
+      if (!row.dirty && row.v === undefined && v !== undefined) {
+        row.v = v
+        await db.cardLogos.update(row.id, { v })
+      }
+    }
+    const { fetch, drop } = mergeCardLogos(here, index)
+    for (const id of fetch) {
+      const logo = await api.fetchCardLogo(token, id)
+      if (logo && stillClub()) await storeClubLogo(slug, logo, logo.v)
+    }
+    await dropCardLogos(drop)
+    if (!(await getCardLogoChoice(slug)).dirty) await storeClubChoice(slug, index.choice)
+    return true
+  } catch (error) {
+    handleAuthError(error)
+    return false
+  }
+}
+
+/** Staff added a card logo: kept here at once, sent to the club now or with the next sync. */
+export async function saveCardLogo(data: string, tone: number, api: CloudApi | null = cloud): Promise<void> {
+  await addCardLogo(useClubAuth.getState().club?.slug, data, tone)
+  recordAudit('cardLogo', 'Added a card logo')
+  void syncCardLogos(api)
+}
+
+/** Staff removed a card logo. */
+export async function forgetCardLogo(id: string, api: CloudApi | null = cloud): Promise<void> {
+  await removeCardLogo(useClubAuth.getState().club?.slug, id)
+  recordAudit('cardLogo', 'Removed a card logo')
+  void syncCardLogos(api)
+}
+
+/** Staff chose which logo the share cards use (`label` names it for the activity log). */
+export async function pickCardLogo(choice: CardLogoChoice, label: string, api: CloudApi | null = cloud): Promise<void> {
+  await setCardLogoChoice(useClubAuth.getState().club?.slug, choice)
+  recordAudit('cardLogo', `Card logo: ${label}`)
+  void syncCardLogos(api)
+}
+
+/**
  * What this device has not sent the club yet, for the signed-in club: what a reset of this device would
  * lose. Nothing without a club (a build with no cloud keeps everything on the device only).
  */
@@ -293,13 +382,15 @@ export async function countUnsent(): Promise<UnsentCounts> {
   if (!club) return NOTHING_UNSENT
   const slug = club.slug
   const { pending, endedSessionIds, parked } = useSessionStore.getState()
-  const [activity, history, roster, renames, avatars, photoSharing] = await Promise.all([
+  const [activity, history, roster, renames, avatars, photoSharing, logos, logoChoice] = await Promise.all([
     db.auditQueue.where('clubSlug').equals(slug).count(),
     unsyncedHistory(slug),
     dirtyRoster(slug),
     getPendingRenames(),
     db.players.filter((p) => p.avatarDirty === true && p.clubSlug === slug).count(),
     getPhotoSharingPending(),
+    unsentCardLogos(slug),
+    getCardLogoChoice(slug),
   ])
   return {
     sessionChanges: pending.length + parkedUnsent(parked),
@@ -312,6 +403,7 @@ export async function countUnsent(): Promise<UnsentCounts> {
     avatars,
     photoSharing,
     skillLevels: useClubScale.getState().pending && useClubScale.getState().clubSlug === slug,
+    cardLogos: logos.length + (logoChoice.dirty ? 1 : 0),
   }
 }
 

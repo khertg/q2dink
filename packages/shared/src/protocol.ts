@@ -303,6 +303,9 @@ export const MEDIA_LIMITS = {
   /** Avatars a club can keep on the server. */
   avatars: 500,
   emojiChars: 8,
+  /** Logos a club can keep for its share cards (the club logo in several colours). */
+  cardLogos: 8,
+  cardLogoBytes: 64 * 1024,
 } as const
 
 export type AvatarKind = 'photo' | 'emoji' | 'initials'
@@ -367,3 +370,44 @@ export interface PutAvatarRequest {
 
 /** How a player's name is turned into an avatar key: trimmed and lower case, like the club leaderboard. */
 export const avatarKey = (name: string) => name.trim().toLowerCase()
+
+// ---- card logos -----------------------------------------------------------------
+
+/**
+ * Which of the club's card logos the Standings and Stats images show: `auto` (the one that stands out best on the
+ * card's colour), `none`, or one staff picked.
+ */
+export type CardLogoChoice = 'auto' | 'none' | { id: string }
+
+/** One logo in the club's list. `tone` is how light it is (0 black to 1 white), for the automatic choice. */
+export interface CardLogoInfo {
+  /** A UUID made on the device that uploaded it. */
+  id: string
+  /** Changes whenever the logo does, so a device fetches it again only then. */
+  v: number
+  tone: number
+}
+
+/** `GET /card-logos` (staff): the club's logos, oldest first, and which one the cards use. */
+export interface CardLogoIndex {
+  logos: CardLogoInfo[]
+  choice: CardLogoChoice
+}
+
+/** `GET /card-logos/:id` (staff): one logo with its image. */
+export interface CardLogo extends CardLogoInfo {
+  type: 'image/png' | 'image/jpeg' | 'image/webp'
+  /** The image as base64 text. */
+  data: string
+}
+
+/** `PUT /card-logos/:id` */
+export interface PutCardLogoRequest {
+  data: string
+  tone: number
+}
+
+/** `PUT /card-logo` */
+export interface ChooseCardLogoRequest {
+  choice: CardLogoChoice
+}

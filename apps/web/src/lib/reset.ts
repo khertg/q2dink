@@ -22,6 +22,8 @@ export interface UnsentCounts {
   photoSharing: boolean
   /** The club's skill levels were changed here and not sent yet. */
   skillLevels: boolean
+  /** Card logos added or removed here, plus one when the logo choice changed here. */
+  cardLogos: number
 }
 
 export const NOTHING_UNSENT: UnsentCounts = {
@@ -35,6 +37,7 @@ export const NOTHING_UNSENT: UnsentCounts = {
   avatars: 0,
   photoSharing: false,
   skillLevels: false,
+  cardLogos: 0,
 }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -51,6 +54,7 @@ export function unsentChanges(c: UnsentCounts): string[] {
     c.avatars > 0 && count(c.avatars, 'avatar', 'avatars'),
     c.photoSharing && 'The player photos switch',
     c.skillLevels && 'The club’s skill levels',
+    c.cardLogos > 0 && count(c.cardLogos, 'change to the card logos', 'changes to the card logos'),
     c.activity > 0 && count(c.activity, 'activity log entry', 'activity log entries'),
   ].filter((line): line is string => typeof line === 'string')
 }

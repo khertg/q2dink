@@ -66,6 +66,25 @@ export interface Setting {
   value: unknown
 }
 
+/**
+ * One of the club's card logos (its logo in one colour), for the Standings and Stats share images. `clubSlug` is
+ * missing in a build with no cloud. `dirty` says what the club has not been told yet: a new or changed logo, or one
+ * removed here (kept until the club has it, so the removal can be sent).
+ */
+export interface CardLogoRow {
+  id: string
+  clubSlug?: string
+  /** The image as a data URL. */
+  data: string
+  /** How light it is, 0 to 1 (see lib/cardLogos.ts). */
+  tone: number
+  /** The club's version of it, once the club has it. */
+  v?: number
+  /** When it was added here, for its place in the list. */
+  addedAt: number
+  dirty?: 'put' | 'delete'
+}
+
 /** An audit log entry made here and not sent to the club yet, for the club that was signed in. */
 export interface QueuedAudit extends AuditEntry {
   clubSlug: string
@@ -79,6 +98,8 @@ export const db = new Dexie('q2dink') as Dexie & {
   settings: EntityTable<Setting, 'key'>
   /** Audit log entries waiting to be sent to the club (see cloud/audit.ts). */
   auditQueue: EntityTable<QueuedAudit, 'id'>
+  /** The club's card logos (see db/cardLogos.ts). */
+  cardLogos: EntityTable<CardLogoRow, 'id'>
 }
 
 db.version(1).stores({
@@ -129,6 +150,16 @@ db.version(6)
     auditQueue: 'id, at, clubSlug',
   })
   .upgrade((tx) => tx.table('settings').delete('logo'))
+
+// Version 7 adds the club's card logos (its logo in several colours, for the share images).
+db.version(7).stores({
+  players: '++id, name, clubSlug',
+  sessions: '++id, createdAt',
+  history: 'id, endedAt',
+  settings: 'key',
+  auditQueue: 'id, at, clubSlug',
+  cardLogos: 'id, clubSlug',
+})
 
 // A device that used the app under its old name brings its data across (see legacyMigration.ts) before the
 // first query runs.

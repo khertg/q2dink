@@ -6,6 +6,8 @@ import {
   type DeletedHistorySummary,
   type AuthGrant,
   type AvatarIndex,
+  type CardLogo,
+  type CardLogoIndex,
   type HistorySummary,
   type LifetimePlayer,
   type LiveRow,
@@ -227,6 +229,23 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
 
     fetchStaffAvatar: (token, key) =>
       request<StaffAvatar>('GET', `/avatars/${encodeURIComponent(key)}`, { token, nullOn404: true }),
+
+    fetchCardLogoIndex: (token) => request<CardLogoIndex>('GET', '/card-logos', { token }),
+
+    fetchCardLogo: (token, id) =>
+      request<CardLogo>('GET', `/card-logos/${encodeURIComponent(id)}`, { token, nullOn404: true }),
+
+    async putCardLogo(token, id, data, tone) {
+      await request('PUT', `/card-logos/${encodeURIComponent(id)}`, { token, body: { data, tone } })
+    },
+
+    async deleteCardLogo(token, id) {
+      await request('DELETE', `/card-logos/${encodeURIComponent(id)}`, { token })
+    },
+
+    async putCardLogoChoice(token, choice) {
+      await request('PUT', '/card-logo', { token, body: { choice } })
+    },
 
     fetchAvatarIndex: (slug) => request<AvatarIndex>('GET', `/clubs/${slugPath(slug)}/avatars`),
 

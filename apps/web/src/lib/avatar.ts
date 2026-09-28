@@ -71,7 +71,7 @@ export const dataUrlBase64 = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(
 
 export class ImageError extends Error {}
 
-async function decode(file: Blob): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> {
+export async function decode(file: Blob): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file)
@@ -92,7 +92,7 @@ async function decode(file: Blob): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
-const toDataUrl = (blob: Blob) =>
+export const toDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result))
@@ -120,7 +120,7 @@ export interface Picture {
   release: () => void
 }
 
-function checkFile(file: Blob) {
+export function checkFile(file: Blob) {
   if (!file.type.startsWith('image/')) throw new ImageError('That file is not a picture.')
   if (file.size > MAX_SOURCE_BYTES) throw new ImageError('That picture is too large. Pick one under 12 MB.')
 }

@@ -235,4 +235,22 @@ export const MIGRATIONS: Migration[] = [
       alter table club_roster add constraint club_roster_rating_range check (rating between 1 and 8);
     `,
   },
+  {
+    id: '012_card_logos',
+    sql: `
+      -- The club's logo in several colours, for its Standings and Stats share images. Each has a tone (how light it
+      -- is, 0 to 1) so a card can pick the one that stands out on its colour.
+      create table club_card_logos (
+        club_slug    text not null references clubs (slug) on delete cascade,
+        id           uuid not null,
+        content_type text not null,
+        data         text not null,
+        tone         real not null check (tone between 0 and 1),
+        updated_at   timestamptz not null default now(),
+        primary key (club_slug, id)
+      );
+      -- Which one the cards use: null for automatic, 'none', or a logo id.
+      alter table clubs add column card_logo text;
+    `,
+  },
 ]

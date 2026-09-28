@@ -1,10 +1,28 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Picture } from '@/lib/avatar'
-import { MAX_ZOOM, MIN_ZOOM, coverScale, cropFromView, initialView, panView, zoomView, type Crop, type View } from '@/lib/crop'
+import { cn } from '@/lib/utils'
+import {
+  MAX_ZOOM,
+  MIN_ZOOM,
+  coverScale,
+  cropFromView,
+  frameSize,
+  initialView,
+  panView,
+  zoomView,
+  type Crop,
+  type Frame,
+  type View,
+} from '@/lib/crop'
 
 /** Side of the square frame the avatar picture is dragged under, in CSS pixels. */
-const FRAME = 256
+const AVATAR_FRAME = 256
+
+/** The shape the frame shows: a circle (avatars, round logos), rounded corners, or a plain rectangle. */
+export type CropMask = 'circle' | 'rounded' | 'rect'
+
+const MASK_CLASS: Record<CropMask, string> = { circle: 'rounded-full', rounded: 'rounded-[20%]', rect: '' }
 
 interface Props {
   picture: Picture
@@ -12,6 +30,10 @@ interface Props {
   /** The chosen part of the picture, in its own pixels. */
   onConfirm: (crop: Crop) => void
   onCancel: () => void
+  /** The frame the picture is dragged under (a 256px square by default). */
+  frame?: Frame
+  mask?: CropMask
+  confirmLabel?: string
 }
 
 /** Round to whole pixels without ever leaving the picture. */
@@ -26,9 +48,19 @@ function whole(crop: Crop, width: number, height: number): Crop {
   }
 }
 
-/** Choose which part of a picked picture makes the avatar: drag and zoom it under a round frame. */
-export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
+/** Choose which part of a picked picture to keep: drag and zoom it under a frame (round by default, for avatars). */
+export function PhotoCropper({
+  picture,
+  busy,
+  onConfirm,
+  onCancel,
+  frame: FRAME = AVATAR_FRAME,
+  mask = 'circle',
+  confirmLabel = 'Use photo',
+}: Props) {
   const { width, height } = picture
+  const box = frameSize(FRAME)
+  const { width: frameWidth, height: frameHeight } = box
   const [view, setView] = useState<View>(initialView)
   const stage = useRef<HTMLDivElement>(null)
   const pointers = useRef(new Map<number, { x: number; y: number }>())
@@ -43,13 +75,14 @@ export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
     if (!element) return
     function handleWheel(event: WheelEvent) {
       event.preventDefault()
-      const box = element!.getBoundingClientRect()
-      const anchor = { x: event.clientX - box.left - FRAME / 2, y: event.clientY - box.top - FRAME / 2 }
-      setView((v) => zoomView(v, v.zoom * Math.exp(-event.deltaY * 0.0015), width, height, FRAME, anchor))
+      const rect = element!.getBoundingClientRect()
+      const anchor = { x: event.clientX - rect.left - frameWidth / 2, y: event.clientY - rect.top - frameHeight / 2 }
+      const frame = { width: frameWidth, height: frameHeight }
+      setView((v) => zoomView(v, v.zoom * Math.exp(-event.deltaY * 0.0015), width, height, frame, anchor))
     }
     element.addEventListener('wheel', handleWheel, { passive: false })
     return () => element.removeEventListener('wheel', handleWheel)
-  }, [width, height])
+  }, [width, height, frameWidth, frameHeight])
 
   function handleDown(event: PointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -69,8 +102,8 @@ export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
     if (pointers.current.size >= 2 && pinch.current) {
       const [a, b] = [...pointers.current.values()]
       const distance = Math.hypot(a.x - b.x, a.y - b.y)
-      const box = stage.current!.getBoundingClientRect()
-      const anchor = { x: (a.x + b.x) / 2 - box.left - FRAME / 2, y: (a.y + b.y) / 2 - box.top - FRAME / 2 }
+      const rect = stage.current!.getBoundingClientRect()
+      const anchor = { x: (a.x + b.x) / 2 - rect.left - box.width / 2, y: (a.y + b.y) / 2 - rect.top - box.height / 2 }
       const ratio = pinch.current.distance > 0 ? distance / pinch.current.distance : 1
       pinch.current.distance = distance
       setView((v) => zoomView(v, v.zoom * ratio, width, height, FRAME, anchor))
@@ -122,7 +155,7 @@ export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
           data-crop={`${crop.sx},${crop.sy},${crop.sw},${crop.sh}`}
           data-zoom={view.zoom.toFixed(2)}
           className="relative touch-none overflow-hidden rounded-lg bg-black select-none focus-visible:ring-[3px] focus-visible:ring-ring/60"
-          style={{ width: FRAME, height: FRAME, cursor: 'grab' }}
+          style={{ width: box.width, height: box.height, cursor: 'grab' }}
           onPointerDown={handleDown}
           onPointerMove={handleMove}
           onPointerUp={handleUp}
@@ -137,14 +170,14 @@ export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
             style={{
               width: shownWidth,
               height: shownHeight,
-              left: FRAME / 2 + view.ox - shownWidth / 2,
-              top: FRAME / 2 + view.oy - shownHeight / 2,
+              left: box.width / 2 + view.ox - shownWidth / 2,
+              top: box.height / 2 + view.oy - shownHeight / 2,
             }}
           />
-          {/* The round frame: everything outside the circle is dimmed. */}
+          {/* The frame: everything outside its shape is dimmed. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-white/80"
+            className={cn('pointer-events-none absolute inset-0 ring-2 ring-white/80', MASK_CLASS[mask])}
             style={{ boxShadow: '0 0 0 999px rgba(0,0,0,0.55)' }}
           />
         </div>
@@ -171,7 +204,7 @@ export function PhotoCropper({ picture, busy, onConfirm, onCancel }: Props) {
           Back
         </Button>
         <Button type="button" disabled={busy} onClick={() => onConfirm(crop)}>
-          Use photo
+          {confirmLabel}
         </Button>
       </div>
     </div>

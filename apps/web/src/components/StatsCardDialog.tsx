@@ -1,6 +1,7 @@
 import { Download, Share2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { CardColorPicker } from '@/components/CardColorPicker'
+import { CardLogoPicker } from '@/components/CardLogoPicker'
 import { StatsCard } from '@/components/StatsCard'
 import { useCardImages } from '@/components/useCardImages'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { cardColors, useCardChoice } from '@/lib/cardPalette'
+import { useCardLogo } from '@/lib/useCardLogo'
 import { canShareNatively, cardFileNames, downloadImages, shareImages } from '@/lib/share'
 import type { Standing } from '@/rotation/standings'
 
@@ -30,11 +32,12 @@ export function StatsCardDialog({ standing, location, date }: Props) {
   const [open, setOpen] = useState(false)
   const native = canShareNatively()
   const colors = cardColors(useCardChoice((s) => s.choice))
+  const { logo } = useCardLogo(colors)
   const { name, rank, medal, wins, losses, games, winRate } = standing
   const { files, failed, retry } = useCardImages({
     open,
     // What the card shows, so an image made for other colours or results is never shared.
-    imageKey: JSON.stringify([colors.from, colors.to, colors.text, location, date, name, rank, medal, wins, losses, games, winRate]),
+    imageKey: JSON.stringify([colors.from, colors.to, colors.text, logo?.id, logo?.v, location, date, name, rank, medal, wins, losses, games, winRate]),
     cards: () => [cardRef.current],
     fileNames: (count) => cardFileNames(`${fileSafe(name) || 'player'}-q2dink-stats`, count),
   })
@@ -61,6 +64,7 @@ export function StatsCardDialog({ standing, location, date }: Props) {
           <DialogDescription>A square image for Instagram, Facebook, Messenger or WhatsApp.</DialogDescription>
         </DialogHeader>
         <CardColorPicker />
+        <CardLogoPicker colors={colors} />
         <div className="flex justify-center overflow-hidden rounded-lg">
           <StatsCard
             ref={cardRef}
@@ -68,6 +72,7 @@ export function StatsCardDialog({ standing, location, date }: Props) {
             location={location}
             date={date}
             colors={colors}
+            logo={logo?.data}
           />
         </div>
         {failed ? (

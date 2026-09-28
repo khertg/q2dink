@@ -215,6 +215,7 @@ describe('migrations', () => {
     expect(tables.rows.map((t) => t.table_name)).toEqual([
       'audit_log',
       'club_avatars',
+      'club_card_logos',
       'club_devices',
       'club_players',
       'club_roster',

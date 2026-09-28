@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ClubLogosDialog } from '@/components/ClubLogosDialog'
 import { ClubPanel } from '@/components/ClubPanel'
 import { OpenSessionsCard } from '@/components/OpenSessionsCard'
 import { LifetimeLeaderboard } from '@/components/LifetimeLeaderboard'
@@ -167,6 +168,7 @@ function SetupCard() {
         <div className="mt-2 space-y-1">
           <SavedPlayersDialog />
           <SkillScaleDialog />
+          <ClubLogosDialog />
           <PastSessionsDialog />
           <LifetimeLeaderboard />
           <ActivityDialog label="Club activity" />

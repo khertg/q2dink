@@ -75,6 +75,7 @@ describe('unsentChanges', () => {
         avatars: 1,
         photoSharing: true,
         skillLevels: true,
+        cardLogos: 2,
       }),
     ).toEqual([
       '1 change to the running session',
@@ -86,6 +87,7 @@ describe('unsentChanges', () => {
       '1 avatar',
       'The player photos switch',
       'The club’s skill levels',
+      '2 changes to the card logos',
       '12 activity log entries',
     ])
     expect(unsentChanges({ ...NOTHING_UNSENT, sessionChanges: 3, activity: 1 })).toEqual([

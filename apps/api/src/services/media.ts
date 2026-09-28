@@ -28,7 +28,7 @@ export function sniffImage(bytes: Buffer): ImageType | null {
 }
 
 /** Check base64 image text: well formed, within `maxBytes` once decoded, and really an image. */
-function checkImage(data: unknown, maxBytes: number): { type: ImageType; data: string } {
+export function checkImage(data: unknown, maxBytes: number): { type: ImageType; data: string } {
   if (typeof data !== 'string' || data.length === 0 || data.length % 4 !== 0 || !BASE64.test(data)) {
     throw new AppError('invalid_request')
   }

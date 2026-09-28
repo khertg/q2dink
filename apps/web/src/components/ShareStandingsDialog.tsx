@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { useClubAuth } from '@/cloud/auth'
 import { viewerUrl } from '@/cloud/url'
 import { CardColorPicker } from '@/components/CardColorPicker'
+import { CardLogoPicker } from '@/components/CardLogoPicker'
 import { StandingsCard } from '@/components/StandingsCard'
 import { useCardImages } from '@/components/useCardImages'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { cardColors, useCardChoice } from '@/lib/cardPalette'
+import { useCardLogo } from '@/lib/useCardLogo'
 import { canShareNatively, cardFileNames, downloadImages, shareImages } from '@/lib/share'
 import { pageStandings, type Standing } from '@/rotation/standings'
 import type { SessionState } from '@/rotation/types'
@@ -37,6 +39,7 @@ export function ShareStandingsDialog({ session, location, standings, date, repea
   const pages = pageStandings(standings)
   const refs = useRef<(HTMLDivElement | null)[]>([])
   const colors = cardColors(useCardChoice((s) => s.choice))
+  const { logo } = useCardLogo(colors)
   const top = withRepeats ? repeatStats(session).summary.topPartnership : undefined
   const topPartnership = top
     ? { names: [session.players[top.a]?.name ?? 'Unknown', session.players[top.b]?.name ?? 'Unknown'] as [string, string], count: top.count }
@@ -47,6 +50,8 @@ export function ShareStandingsDialog({ session, location, standings, date, repea
     colors.from,
     colors.to,
     colors.text,
+    logo?.id,
+    logo?.v,
     location,
     date,
     topPartnership?.names,
@@ -100,6 +105,7 @@ export function ShareStandingsDialog({ session, location, standings, date, repea
           </DialogDescription>
         </DialogHeader>
         <CardColorPicker />
+        <CardLogoPicker colors={colors} />
         <div className="flex max-h-[50vh] flex-col items-center gap-3 overflow-y-auto rounded-lg">
           {pages.map((page, i) => (
             <StandingsCard
@@ -114,6 +120,7 @@ export function ShareStandingsDialog({ session, location, standings, date, repea
               date={date}
               topPartnership={i === pages.length - 1 ? topPartnership : undefined}
               colors={colors}
+              logo={logo?.data}
             />
           ))}
         </div>

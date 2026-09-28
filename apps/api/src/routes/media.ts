@@ -1,5 +1,9 @@
 import type {
+  CardLogo,
+  CardLogoIndex,
+  ChooseCardLogoRequest,
   PhotoSharingRequest,
+  PutCardLogoRequest,
   PutAvatarRequest,
   StaffAvatar,
   StaffAvatarIndex,
@@ -17,6 +21,7 @@ import {
   setPhotoSharing,
   type StoredImage,
 } from '../services/media'
+import { chooseCardLogo, deleteCardLogo, getCardLogo, getCardLogoIndex, putCardLogo } from '../services/cardLogos'
 import { authenticate, publicSlug, slugParams } from './auth'
 
 const avatarBody = {
@@ -41,6 +46,42 @@ const photoSharingBody = {
   required: ['on'],
   additionalProperties: false,
   properties: { on: { type: 'boolean' } },
+} as const
+
+const cardLogoBody = {
+  type: 'object',
+  required: ['data', 'tone'],
+  additionalProperties: false,
+  properties: {
+    // 64 KB of image as base64, with room to spare.
+    data: { type: 'string', maxLength: 90 * 1024 },
+    tone: { type: 'number', minimum: 0, maximum: 1 },
+  },
+} as const
+
+const cardLogoChoiceBody = {
+  type: 'object',
+  required: ['choice'],
+  additionalProperties: false,
+  properties: {
+    choice: {
+      oneOf: [
+        { type: 'string', enum: ['auto', 'none'] },
+        {
+          type: 'object',
+          required: ['id'],
+          additionalProperties: false,
+          properties: { id: { type: 'string', maxLength: 64 } },
+        },
+      ],
+    },
+  },
+} as const
+
+const idParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', maxLength: 64 } },
 } as const
 
 const keyParams = {
@@ -85,6 +126,49 @@ export function registerMediaRoutes(api: FastifyInstance, { db, config }: RouteD
     await authenticate(db, request)
     return reply.code(204).send()
   })
+
+  // The club's logo in several colours, for its Standings and Stats share images (staff only).
+  api.get('/card-logos', async (request): Promise<CardLogoIndex> => {
+    const { slug } = await authenticate(db, request)
+    return getCardLogoIndex(db, slug)
+  })
+
+  api.get<{ Params: { id: string } }>('/card-logos/:id', { schema: { params: idParams } }, async (request): Promise<CardLogo> => {
+    const { slug } = await authenticate(db, request)
+    const logo = await getCardLogo(db, slug, request.params.id)
+    if (!logo) throw new AppError('not_found')
+    return logo
+  })
+
+  api.put<{ Params: { id: string }; Body: PutCardLogoRequest }>(
+    '/card-logos/:id',
+    { config: write, schema: { params: idParams, body: cardLogoBody } },
+    async (request, reply) => {
+      const { slug } = await authenticate(db, request)
+      await putCardLogo(db, slug, request.params.id, request.body)
+      return reply.code(204).send()
+    },
+  )
+
+  api.delete<{ Params: { id: string } }>(
+    '/card-logos/:id',
+    { config: write, schema: { params: idParams } },
+    async (request, reply) => {
+      const { slug } = await authenticate(db, request)
+      await deleteCardLogo(db, slug, request.params.id)
+      return reply.code(204).send()
+    },
+  )
+
+  api.put<{ Body: ChooseCardLogoRequest }>(
+    '/card-logo',
+    { config: write, schema: { body: cardLogoChoiceBody } },
+    async (request, reply) => {
+      const { slug } = await authenticate(db, request)
+      await chooseCardLogo(db, slug, request.body.choice)
+      return reply.code(204).send()
+    },
+  )
 
   api.put<{ Params: { key: string }; Body: PutAvatarRequest }>(
     '/avatars/:key',

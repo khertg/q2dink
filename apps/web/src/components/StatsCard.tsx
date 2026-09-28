@@ -1,5 +1,6 @@
 import { Medal as MedalIcon } from 'lucide-react'
 import type { Ref } from 'react'
+import { CardLogo, CardTop } from '@/components/CardTop'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { useSessionTitle } from '@/lib/avatars'
 import type { CardColors } from '@/lib/cardPalette'
@@ -12,6 +13,8 @@ interface Props {
   date: string
   /** The picked colours (see cardColors). */
   colors: CardColors
+  /** The club's card logo for these colours (a data URL), shown beside the card's title. */
+  logo?: string
   ref?: Ref<HTMLDivElement>
 }
 
@@ -20,7 +23,7 @@ interface Props {
  * (`colors`), not theme tokens, so the exported image looks the same in light and dark mode. A medallist
  * stands out: the card is edged in the medal's colour, the avatar ringed in it, and a pill names the medal.
  */
-export function StatsCard({ standing, location, date, colors, ref }: Props) {
+export function StatsCard({ standing, location, date, colors, logo, ref }: Props) {
   const { name, rank, medal, wins, losses, games, winRate } = standing
   const title = useSessionTitle(location)
   const style = medalStyle(medal)
@@ -34,10 +37,7 @@ export function StatsCard({ standing, location, date, colors, ref }: Props) {
         boxShadow: style ? `inset 0 0 0 4px ${style.color}` : undefined,
       }}
     >
-      <div className="flex items-center justify-between text-sm font-semibold tracking-widest">
-        <span>Q2DINK</span>
-        <span className="opacity-80">{date}</span>
-      </div>
+      <CardTop date={date} />
 
       <div>
         {style ? (
@@ -65,10 +65,13 @@ export function StatsCard({ standing, location, date, colors, ref }: Props) {
           </span>
           <p className="min-w-0 flex-1 break-words text-4xl leading-tight font-bold">{name}</p>
         </div>
-        <p className="mt-1 w-fit text-lg opacity-90">
-          Finished #{rank}
-        </p>
-        <p className="w-fit text-sm opacity-90">{title}</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="w-fit text-lg opacity-90">Finished #{rank}</p>
+            <p className="w-fit text-sm opacity-90">{title}</p>
+          </div>
+          {logo && <CardLogo src={logo} />}
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-2 text-center">

@@ -2,6 +2,9 @@ import type {
   AuditEntry,
   AuditPage,
   AuthGrant,
+  CardLogo,
+  CardLogoChoice,
+  CardLogoIndex,
   ClubDevice,
   ClubSessionSummary,
   DeletedHistorySummary,
@@ -111,6 +114,15 @@ export interface CloudApi {
   fetchStaffAvatars(token: string): Promise<StaffAvatarIndex>
   /** One avatar with its photo, or null when the player has none (staff only). */
   fetchStaffAvatar(token: string, key: string): Promise<StaffAvatar | null>
+
+  /** The club's card logos (its logo in several colours for the share images) and which one the cards use. */
+  fetchCardLogoIndex(token: string): Promise<CardLogoIndex>
+  /** One card logo with its image, or null when the club no longer has it. */
+  fetchCardLogo(token: string, id: string): Promise<CardLogo | null>
+  /** Add or replace a card logo (base64 image). */
+  putCardLogo(token: string, id: string, data: string, tone: number): Promise<void>
+  deleteCardLogo(token: string, id: string): Promise<void>
+  putCardLogoChoice(token: string, choice: CardLogoChoice): Promise<void>
   /** Every avatar the club has. Public, so the live page can use it. */
   fetchAvatarIndex(slug: string): Promise<AvatarIndex>
   /** Where a player's photo is, at this version. */

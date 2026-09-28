@@ -275,3 +275,68 @@ describe('player photos on the live page', () => {
     expect(response.json().name).toBe('Riverside Pickleball')
   })
 })
+
+describe('card logos', () => {
+  const ID = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002']
+  const putCardLogo = (token: string | null, id: string, payload: unknown) =>
+    app.inject({ method: 'PUT', url: `/api/card-logos/${id}`, headers: token ? bearer(token) : {}, payload: payload as object })
+  const choose = (token: string, choice: unknown) =>
+    app.inject({ method: 'PUT', url: '/api/card-logo', headers: bearer(token), payload: { choice } as object })
+  const index = async (token: string) => (await app.inject({ method: 'GET', url: '/api/card-logos', headers: bearer(token) })).json()
+
+  it('keeps the club’s logos with their tone, starts automatic, and serves each image to staff only', async () => {
+    const { token } = await createClub(app)
+    expect(await index(token)).toEqual({ logos: [], choice: 'auto' })
+    expect((await putCardLogo(null, ID[0], { data: b64(png()), tone: 1 })).statusCode).toBe(401)
+    expect((await putCardLogo(token, ID[0], { data: b64(png()), tone: 1 })).statusCode).toBe(204)
+    expect((await putCardLogo(token, ID[1], { data: b64(webp()), tone: 0.05 })).statusCode).toBe(204)
+    const listed = await index(token)
+    expect(listed.choice).toBe('auto')
+    expect(listed.logos.map((l: { id: string; tone: number }) => [l.id, l.tone])).toEqual([
+      [ID[0], 1],
+      [ID[1], expect.closeTo(0.05, 5)],
+    ])
+    const one = await app.inject({ method: 'GET', url: `/api/card-logos/${ID[1]}`, headers: bearer(token) })
+    expect(one.json()).toMatchObject({ id: ID[1], type: 'image/webp', data: b64(webp()) })
+    expect((await app.inject({ method: 'GET', url: `/api/card-logos/${ID[1]}` })).statusCode).toBe(401)
+    // Sending it again replaces it.
+    expect((await putCardLogo(token, ID[0], { data: b64(jpeg()), tone: 0.5 })).statusCode).toBe(204)
+    expect((await index(token)).logos).toHaveLength(2)
+  })
+
+  it('lets staff pick one or none, and goes back to automatic when the picked one is removed', async () => {
+    const { token } = await createClub(app)
+    await putCardLogo(token, ID[0], { data: b64(png()), tone: 1 })
+    expect((await choose(token, { id: ID[0] })).statusCode).toBe(204)
+    expect((await index(token)).choice).toEqual({ id: ID[0] })
+    expect((await choose(token, 'none')).statusCode).toBe(204)
+    expect((await index(token)).choice).toBe('none')
+    expect((await choose(token, { id: ID[1] })).statusCode).toBe(400)
+    expect((await choose(token, 'sometimes')).statusCode).toBe(400)
+    await choose(token, { id: ID[0] })
+    expect((await app.inject({ method: 'DELETE', url: `/api/card-logos/${ID[0]}`, headers: bearer(token) })).statusCode).toBe(204)
+    expect(await index(token)).toEqual({ logos: [], choice: 'auto' })
+  })
+
+  it('refuses what is not an image, a bad tone or id, and more than the limit', async () => {
+    const { token } = await createClub(app)
+    expect((await putCardLogo(token, ID[0], { data: b64(Buffer.from('<svg></svg>')), tone: 1 })).statusCode).toBe(400)
+    expect((await putCardLogo(token, ID[0], { data: b64(png()), tone: 2 })).statusCode).toBe(400)
+    expect((await putCardLogo(token, 'not-a-uuid', { data: b64(png()), tone: 1 })).statusCode).toBe(400)
+    expect((await putCardLogo(token, ID[0], { data: b64(png(MEDIA_LIMITS.cardLogoBytes)), tone: 1 })).statusCode).toBe(413)
+    for (let i = 0; i < MEDIA_LIMITS.cardLogos; i++) {
+      const id = `00000000-0000-4000-8000-${String(i + 10).padStart(12, '0')}`
+      expect((await putCardLogo(token, id, { data: b64(png()), tone: 1 })).statusCode).toBe(204)
+    }
+    expect((await putCardLogo(token, ID[0], { data: b64(png()), tone: 1 })).statusCode).toBe(413)
+  })
+
+  it('keeps each club’s logos to itself', async () => {
+    const a = await createClub(app)
+    const b = await createClub(app, { name: 'Other Club' })
+    await putCardLogo(a.token, ID[0], { data: b64(png()), tone: 1 })
+    expect((await index(b.token)).logos).toEqual([])
+    expect((await app.inject({ method: 'GET', url: `/api/card-logos/${ID[0]}`, headers: bearer(b.token) })).statusCode).toBe(404)
+    expect((await choose(b.token, { id: ID[0] })).statusCode).toBe(400)
+  })
+})

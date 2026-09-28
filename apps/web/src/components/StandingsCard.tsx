@@ -1,4 +1,5 @@
 import type { Ref } from 'react'
+import { CardLogo, CardTop } from '@/components/CardTop'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { useSessionTitle } from '@/lib/avatars'
 import type { CardColors } from '@/lib/cardPalette'
@@ -17,6 +18,8 @@ interface Props {
   topPartnership?: { names: [string, string]; count: number }
   /** The picked colours (see cardColors). */
   colors: CardColors
+  /** The club's card logo for these colours (a data URL), shown beside the card's title. */
+  logo?: string
   ref?: Ref<HTMLDivElement>
 }
 
@@ -34,7 +37,7 @@ interface Props {
  * different widths too, which is the "inconsistent size" this guards against. A lone page (no
  * set to match) is left to size itself naturally.
  */
-export function StandingsCard({ page, pageNumber, pageCount, location, date, topPartnership, colors, ref }: Props) {
+export function StandingsCard({ page, pageNumber, pageCount, location, date, topPartnership, colors, logo, ref }: Props) {
   const padded = pageCount > 1
   const rowSlots = padded ? STANDINGS_PAGE_SIZE : page.length
   const title = useSessionTitle(location)
@@ -45,19 +48,19 @@ export function StandingsCard({ page, pageNumber, pageCount, location, date, top
       className="flex w-[360px] flex-col gap-4 p-6"
       style={{ background: colors.background, color: colors.text }}
     >
-      <div className="flex items-center justify-between text-sm font-semibold tracking-widest">
-        <span>Q2DINK</span>
-        <span className="opacity-80">{date}</span>
-      </div>
+      <CardTop date={date} />
 
-      <div>
-        <p className="text-2xl leading-tight font-bold">Standings</p>
-        <p className="text-sm opacity-90">{title}</p>
-        {pageCount > 1 && (
-          <p className="text-xs uppercase tracking-wide opacity-70">
-            Page {pageNumber} of {pageCount}
-          </p>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-2xl leading-tight font-bold">Standings</p>
+          <p className="text-sm opacity-90">{title}</p>
+          {pageCount > 1 && (
+            <p className="text-xs uppercase tracking-wide opacity-70">
+              Page {pageNumber} of {pageCount}
+            </p>
+          )}
+        </div>
+        {logo && <CardLogo src={logo} />}
       </div>
 
       <div className="flex flex-col gap-1.5">

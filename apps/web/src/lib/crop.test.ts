@@ -137,3 +137,36 @@ describe('cropFromView', () => {
     expect(previous).toBe(600)
   })
 })
+
+describe('a wide frame (2:1, for club logos)', () => {
+  const WIDE = { width: 288, height: 144 }
+
+  it('covers the frame and crops a 2:1 rectangle, the whole width of a square picture at first', () => {
+    expect(coverScale(1000, 1000, WIDE)).toBeCloseTo(0.288)
+    const c = cropFromView(initialView(), 1000, 1000, WIDE)
+    expect([c.sx, c.sy, c.sw, c.sh].map((n) => Math.round(n))).toEqual([0, 250, 1000, 500])
+  })
+
+  it('moves only where the picture reaches past the frame, and zooms around a point', () => {
+    // A square picture fills the frame's width exactly: no sideways slack, some up and down.
+    expect(clampView({ zoom: 1, ox: 50, oy: 500 }, 1000, 1000, WIDE)).toEqual({ zoom: 1, ox: 0, oy: 72 })
+    const zoomed = zoomView(initialView(), 2, 1000, 1000, WIDE)
+    const c = cropFromView(zoomed, 1000, 1000, WIDE)
+    expect([c.sx, c.sy, c.sw, c.sh].map((n) => Math.round(n))).toEqual([250, 375, 500, 250])
+  })
+
+  it('is always 2:1 inside the picture, whatever the picture, zoom and offset (random)', () => {
+    const next = random(11)
+    for (let i = 0; i < 2000; i++) {
+      const width = 1 + Math.floor(next() * 4000)
+      const height = 1 + Math.floor(next() * 4000)
+      const view = { zoom: next() * 6, ox: (next() - 0.5) * 3000, oy: (next() - 0.5) * 3000 }
+      const c = cropFromView(view, width, height, WIDE)
+      expect(c.sw / c.sh).toBeCloseTo(2)
+      expect(c.sx).toBeGreaterThanOrEqual(0)
+      expect(c.sy).toBeGreaterThanOrEqual(0)
+      expect(c.sx + c.sw).toBeLessThanOrEqual(width + 1e-9)
+      expect(c.sy + c.sh).toBeLessThanOrEqual(height + 1e-9)
+    }
+  })
+})
