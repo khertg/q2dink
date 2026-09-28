@@ -107,7 +107,8 @@ function StandingRow({ row, panel }: { row: Standing; panel: string }) {
       }}
     >
       <span className="w-5 shrink-0 text-center text-sm font-bold">{row.rank}</span>
-      <span className="shrink-0 rounded-full" style={medal ? { boxShadow: `0 0 0 2px ${medal.color}` } : undefined}>
+      {/* inline-flex: the ring hugs the picture (a photo sits on the text baseline and would leave a gap below it). */}
+      <span className="inline-flex shrink-0 rounded-full" style={medal ? { boxShadow: `0 0 0 2px ${medal.color}` } : undefined}>
         <PlayerAvatar name={row.name} size="sm" />
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{row.name}</span>

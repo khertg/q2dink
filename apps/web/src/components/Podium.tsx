@@ -49,7 +49,7 @@ export function Podium({ places }: { places: PodiumPlace[] }) {
           >
             <div aria-hidden="true" className="flex -space-x-3">
               {shown.map((p) => (
-                <span key={p.id} className={cn('rounded-full', gold && 'motion-safe:animate-podium-glow')}>
+                <span key={p.id} className={cn('inline-flex rounded-full', gold && 'motion-safe:animate-podium-glow')}>
                   <PlayerAvatar name={p.name} size={gold ? 'md' : 'sm'} className="ring-2 ring-background" />
                 </span>
               ))}
