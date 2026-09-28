@@ -6,6 +6,7 @@ import { cardColors, DEFAULT_CARD_CHOICE } from '@/lib/cardPalette'
 import type { Standing } from '@/rotation/standings'
 import { Podium } from './Podium'
 import { StandingsCard } from './StandingsCard'
+import { StatsCard } from './StatsCard'
 
 const photo = { kind: 'photo', data: 'data:image/png;base64,' } as const
 const withPhotos = (node: ReactNode) =>
@@ -32,6 +33,12 @@ describe('medal rings around photos', () => {
     const card = (
       <StandingsCard page={[ann]} pageNumber={1} pageCount={1} location="" date="" colors={cardColors(DEFAULT_CARD_CHOICE)} />
     )
+    expect(photoWrapper(withPhotos(card))).toContain('inline-flex')
+  })
+
+  it('hug the photo on a player’s stats card', () => {
+    const standing = { ...ann, games: 3, winRate: 1 } as Standing
+    const card = <StatsCard standing={standing} location="" date="" colors={cardColors(DEFAULT_CARD_CHOICE)} />
     expect(photoWrapper(withPhotos(card))).toContain('inline-flex')
   })
 })

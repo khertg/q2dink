@@ -53,8 +53,9 @@ export function StatsCard({ standing, location, date, colors, logo, ref }: Props
         )}
         <div className="mt-2.5 flex items-center gap-3">
           <span
-            className="shrink-0 rounded-full"
-            // A medallist's ring is their medal's colour.
+            className="inline-flex shrink-0 rounded-full"
+            // A medallist's ring is their medal's colour. inline-flex: it hugs the picture (a photo sits on the text
+            // baseline and would leave a gap below it, making the ring an oval).
             style={style ? { boxShadow: `0 0 0 4px ${style.color}` } : undefined}
           >
             <PlayerAvatar
