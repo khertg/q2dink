@@ -182,6 +182,23 @@ test.describe('entering a score', () => {
     await expect(page.getByText('Court 1: Orange won 11–6')).toBeVisible()
   })
 
+  test('Record sits beside the score being typed, so a phone keyboard never hides it; Enter records too', async ({ page }) => {
+    await startSingles(page)
+    let dialog = await openScorePopup(page, 'B')
+    // Orange won: Blue's score is typed, at the top.
+    await expect(dialog.getByLabel('Blue score')).toBeFocused()
+    await expect(dialog.getByRole('group', { name: 'Blue' }).getByRole('button', { name: 'Record score' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Record score' })).toHaveCount(1)
+    await page.keyboard.press('Escape')
+
+    dialog = await openScorePopup(page, 'A')
+    await expect(dialog.getByLabel('Orange score')).toBeFocused()
+    await expect(dialog.getByRole('group', { name: 'Orange' }).getByRole('button', { name: 'Record score' })).toBeVisible()
+    await dialog.getByLabel('Orange score').fill('8')
+    await page.keyboard.press('Enter')
+    await expect(page.getByText('Court 1: Blue won 11–8')).toBeVisible()
+  })
+
   test('derives the winner from the scores even when Orange scores more', async ({ page }) => {
     await startSingles(page)
     await enterScore(page, 6, 11)
