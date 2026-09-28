@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Gauge, MoreVerticalIcon, Pencil, X, XCircle } from 'lucide-react'
+import { ChevronDown, ChevronUp, Gauge, MoreVerticalIcon, Pause, Pencil, Play, X, XCircle } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -97,6 +97,8 @@ function RenameCourtDialog({ court, open, onOpenChange }: { court: Court; open: 
 export function CourtMenu({ court, index, count, onCancel }: Props) {
   const moveCourt = useSessionStore((s) => s.moveCourt)
   const closeCourt = useSessionStore((s) => s.closeCourt)
+  const pauseGame = useSessionStore((s) => s.pauseGame)
+  const resumeGame = useSessionStore((s) => s.resumeGame)
   const [renaming, setRenaming] = useState(false)
   const [levels, setLevels] = useState(false)
   const [confirmingClose, setConfirmingClose] = useState(false)
@@ -107,6 +109,16 @@ export function CourtMenu({ court, index, count, onCancel }: Props) {
     toast(`${court.name} moved ${offset < 0 ? 'up' : 'down'}`)
   }
 
+  function togglePause() {
+    if (court.pausedByStaff) {
+      resumeGame(court.id)
+      toast(`${court.name}: game resumed.`)
+    } else {
+      pauseGame(court.id)
+      toast(`${court.name}: game paused. Its time stands still until you resume it.`)
+    }
+  }
+
   function close() {
     closeCourt(court.id)
     toast(`${court.name} closed`)
@@ -114,6 +126,9 @@ export function CourtMenu({ court, index, count, onCancel }: Props) {
 
   const items = [
     ...(state.cancelLabel ? [{ label: state.cancelLabel, icon: XCircle, onClick: onCancel }] : []),
+    ...(state.pauseLabel
+      ? [{ label: state.pauseLabel, icon: court.pausedByStaff ? Play : Pause, onClick: togglePause }]
+      : []),
     { label: 'Rename…', icon: Pencil, onClick: () => setRenaming(true) },
     { label: 'Skill levels…', icon: Gauge, onClick: () => setLevels(true) },
     { label: 'Move up', icon: ChevronUp, onClick: () => move(-1), blocked: state.canMoveUp ? undefined : '' },

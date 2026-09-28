@@ -140,6 +140,12 @@ describe('describeAction and partner locks', () => {
   // Court 1: Ann & Bob (Blue) vs Cy & Dee; Eve and Fay wait.
   const [a, b] = blue
 
+  it('says when staff pause and resume a court’s game', () => {
+    expect(say(playing, { type: 'pauseGame', courtId: 1, now: 2000 })).toBe('Court 1: game paused')
+    const paused = apply(playing, { type: 'pauseGame', courtId: 1, now: 2000 })
+    expect(say(paused, { type: 'resumeGame', courtId: 1, now: 3000 })).toBe('Court 1: game resumed')
+  })
+
   it('says a lock was made now, or waits for a game', () => {
     expect(say(playing, { type: 'lockPartners', a: 5, b: a, lockNow: true })).toBe(`Locked Eve & ${n(playing, [a])} as partners now: they wait for each other`)
     expect(say(playing, { type: 'lockPartners', a: 5, b: a })).toBe(`Locked Eve & ${n(playing, [a])} as partners, starting once both have played`)

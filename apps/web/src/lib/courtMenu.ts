@@ -4,6 +4,8 @@ import type { Court } from '@/rotation/types'
 export interface CourtMenuState {
   /** The first item while the court has players: cancel its game, or clear a line-up being set up. */
   cancelLabel?: 'Cancel game' | 'Clear court'
+  /** On a game in progress: pause it, or resume it when staff paused it. */
+  pauseLabel?: 'Pause game' | 'Resume game'
   canMoveUp: boolean
   canMoveDown: boolean
   /** Why Close court cannot be done (it is then shown disabled with this reason). */
@@ -17,6 +19,7 @@ export function courtMenuState(court: Court, index: number, count: number): Cour
   const staged = !!court.notStarted
   return {
     ...(court.teams ? { cancelLabel: staged ? ('Clear court' as const) : ('Cancel game' as const) } : {}),
+    ...(court.teams && !staged ? { pauseLabel: court.pausedByStaff ? ('Resume game' as const) : ('Pause game' as const) } : {}),
     canMoveUp: index > 0,
     canMoveDown: index < count - 1,
     ...(count <= MIN_COURTS ? { closeBlocked: 'A session needs at least one court' } : {}),

@@ -13,6 +13,15 @@ describe('courtMenuState', () => {
     expect(courtMenuState(open, 0, 2).cancelLabel).toBeUndefined()
   })
 
+  it('offers Pause game on a game in progress, Resume game once staff paused it, and neither otherwise', () => {
+    expect(courtMenuState(playing, 0, 2).pauseLabel).toBe('Pause game')
+    expect(courtMenuState({ ...playing, pausedAt: 1, pausedByStaff: true }, 0, 2).pauseLabel).toBe('Resume game')
+    // Paused only for an open spot: staff can still pause it, so filling the spot does not resume it.
+    expect(courtMenuState({ ...playing, pausedAt: 1 }, 0, 2).pauseLabel).toBe('Pause game')
+    expect(courtMenuState(staged, 0, 2).pauseLabel).toBeUndefined()
+    expect(courtMenuState(open, 0, 2).pauseLabel).toBeUndefined()
+  })
+
   it('moves up except the first court, and down except the last', () => {
     expect(courtMenuState(open, 0, 3)).toMatchObject({ canMoveUp: false, canMoveDown: true })
     expect(courtMenuState(open, 1, 3)).toMatchObject({ canMoveUp: true, canMoveDown: true })

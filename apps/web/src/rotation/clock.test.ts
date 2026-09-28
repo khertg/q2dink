@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkIn,
+  cancelMatch,
   createSession,
+  fillCourtSpot,
   isLive,
   lastActivityAt,
   markNotStarted,
+  pauseGame,
   pauseSession,
   playedMs,
   recordScore,
+  removeFromCourt,
+  resumeGame,
   resumeSession,
   sessionNow,
   sessionStatus,
@@ -117,5 +122,78 @@ describe('a pause that arrives late', () => {
     expect(playedMs(paused.courts[0], sessionNow(paused, 99 * MIN))).toBe(0)
     const resumed = resumeSession(paused, 30 * MIN)
     expect(playedMs(resumed.courts[0], 31 * MIN)).toBe(MIN)
+  })
+})
+
+describe('pausing one court’s game (Pause game)', () => {
+  /** Two courts, eight players, both games started at minute 0; P9 waits. */
+  function twoGames(): SessionState {
+    let s = createSession('doubles', 2)
+    for (let id = 1; id <= 9; id++) s = checkIn(s, player(id), 0)
+    s = startGame(s, 1, { now: 0 })
+    return startGame(s, 2, { now: 0 })
+  }
+
+  it('stands its time still until resumed, while the other court keeps running', () => {
+    let s = pauseGame(twoGames(), 1, 4 * MIN)
+    expect(s.courts[0]).toMatchObject({ pausedAt: 4 * MIN, pausedByStaff: true })
+    expect(playedMs(s.courts[0], 9 * MIN)).toBe(4 * MIN)
+    expect(playedMs(s.courts[1], 9 * MIN)).toBe(9 * MIN)
+    s = resumeGame(s, 1, 10 * MIN)
+    expect(s.courts[0].pausedAt).toBeUndefined()
+    expect(s.courts[0].pausedByStaff).toBeUndefined()
+    expect(s.courts[0].pausedSeconds).toBe(6 * 60)
+    const done = recordScore(s, 1, 11, 4, { now: 12 * MIN }).state
+    expect(done.matches?.[0].seconds).toBe(6 * 60)
+  })
+
+  it('pausing twice keeps the first pause; resuming a running game changes nothing', () => {
+    const once = pauseGame(twoGames(), 1, 4 * MIN)
+    expect(pauseGame(once, 1, 6 * MIN)).toBe(once)
+    const s = twoGames()
+    expect(resumeGame(s, 1, MIN)).toBe(s)
+  })
+
+  it('needs a game in progress', () => {
+    let s = createSession('doubles', 2)
+    for (let id = 1; id <= 4; id++) s = checkIn(s, player(id), 0)
+    expect(() => pauseGame(s, 1, MIN)).toThrow(/no game in progress/)
+    const staged = fillCourtSpot(s, 1, 0, 1, MIN, 0)
+    expect(() => pauseGame(staged, 1, MIN)).toThrow(/has not started/)
+  })
+
+  it('filling an open spot does not resume it; resuming a short game waits for the spot', () => {
+    let s = pauseGame(twoGames(), 1, 2 * MIN)
+    const out = s.courts[0].teams![0][0]
+    s = removeFromCourt(s, 1, out, { now: 3 * MIN })
+    expect(s.courts[0].pausedAt).toBe(2 * MIN)
+    s = fillCourtSpot(s, 1, 0, 9, 4 * MIN, 0)
+    expect(s.courts[0]).toMatchObject({ pausedAt: 2 * MIN, pausedByStaff: true })
+    // Short again, then resumed: still paused until the spot is filled.
+    s = removeFromCourt(s, 1, 9, { now: 5 * MIN })
+    s = resumeGame(s, 1, 6 * MIN)
+    expect(s.courts[0].pausedByStaff).toBeUndefined()
+    expect(s.courts[0].pausedAt).toBe(2 * MIN)
+    s = fillCourtSpot(s, 1, 0, 9, 7 * MIN, 0)
+    expect(s.courts[0].pausedAt).toBeUndefined()
+    expect(s.courts[0].pausedSeconds).toBe(5 * 60)
+  })
+
+  it('works while the session is paused: the session stop is never counted twice', () => {
+    let s = pauseSession(twoGames(), 5 * MIN)
+    s = pauseGame(s, 1, sessionNow(s, 8 * MIN)) // at the session's frozen time, minute 5
+    s = resumeSession(s, 20 * MIN) // 15 minutes stopped: every timer moves on by 15
+    expect(s.courts[0].pausedAt).toBe(20 * MIN)
+    s = resumeGame(s, 1, 22 * MIN)
+    expect(playedMs(s.courts[0], 25 * MIN)).toBe(8 * MIN)
+    expect(playedMs(s.courts[1], 25 * MIN)).toBe(10 * MIN)
+  })
+
+  it('a paused game can be finished or cancelled, with its time up to the pause, and the next game runs', () => {
+    const s = pauseGame(twoGames(), 1, 4 * MIN)
+    const done = recordScore(s, 1, 11, 7, { now: 9 * MIN }).state
+    expect(done.matches?.[0].seconds).toBe(4 * 60)
+    expect(done.courts[0]).toEqual({ id: 1, name: 'Court 1', teams: null })
+    expect(cancelMatch(s, 1, 9 * MIN).courts[0].pausedByStaff).toBeUndefined()
   })
 })

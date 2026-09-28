@@ -10,6 +10,7 @@ import {
   dropFromNextUp,
   editMatch,
   fillCourtSpot,
+  pauseGame,
   fillNextUpSpot,
   lockPartners,
   moveCourt,
@@ -24,6 +25,7 @@ import {
   replaceNextUp,
   replacePlayer,
   resetNextUp,
+  resumeGame,
   resumeSession,
   sessionNow,
   setAvgGameMinutes,
@@ -76,6 +78,8 @@ export type SessionAction =
   | { type: 'removeFromCourt'; courtId: number; playerId: number; onBreak: boolean; now: number }
   | { type: 'fillCourtSpot'; courtId: number; team: 0 | 1; slot?: number; playerId: number; now: number }
   | { type: 'fillNextUpSpot'; lane: number; slot: number; playerId: number; now: number }
+  | { type: 'pauseGame'; courtId: number; now: number }
+  | { type: 'resumeGame'; courtId: number; now: number }
   | { type: 'resetNextUp' }
   /** `lockNow`: in force at once even with one of them away (they hold for each other); missing: waits for a game. */
   | { type: 'lockPartners'; a: number; b: number; lockNow?: boolean }
@@ -195,6 +199,10 @@ function applyChange(session: SessionState, action: SessionAction): Applied {
       return { session: fillCourtSpot(session, action.courtId, action.team, action.playerId, action.now, action.slot) }
     case 'fillNextUpSpot':
       return { session: fillNextUpSpot(session, action.lane, action.slot, action.playerId, action.now) }
+    case 'pauseGame':
+      return { session: pauseGame(session, action.courtId, action.now) }
+    case 'resumeGame':
+      return { session: resumeGame(session, action.courtId, action.now) }
     case 'resetNextUp':
       return { session: resetNextUp(session) }
     case 'lockPartners':

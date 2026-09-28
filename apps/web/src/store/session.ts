@@ -172,6 +172,9 @@ interface SessionStore {
   fillCourtSpot: (courtId: number, team: 0 | 1, slot: number, playerId: number) => void
   /** Pin a waiting (or resting) player into an open Next up spot of a lane; the group forms around them. */
   fillNextUpSpot: (lane: number, slot: number, playerId: number) => void
+  /** Pause the game on a court (its time stands still) until resumeGame. */
+  pauseGame: (courtId: number) => void
+  resumeGame: (courtId: number) => void
   /** Go back to the automatic next group. */
   resetNextUp: () => void
   /** Lock two checked-in players as doubles partners. */
@@ -462,6 +465,10 @@ export const useSessionStore = create<SessionStore>()(
 
         fillNextUpSpot: (lane, slot, playerId) =>
           dispatch({ type: 'fillNextUpSpot', lane, slot, playerId, now: Date.now() }, null),
+
+        pauseGame: (courtId) => dispatch({ type: 'pauseGame', courtId, now: Date.now() }, null),
+
+        resumeGame: (courtId) => dispatch({ type: 'resumeGame', courtId, now: Date.now() }, null),
 
         resetNextUp: () => dispatch({ type: 'resetNextUp' }, null),
 

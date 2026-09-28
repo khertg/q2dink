@@ -114,6 +114,10 @@ export function describeAction(before: SessionState, action: SessionAction, afte
       return say(`${court(action.courtId)}: ${name(action.playerId)} into the open ${TEAM_NAMES[action.team]} spot`)
     case 'fillNextUpSpot':
       return say(`Next up: ${name(action.playerId)} into an open spot`)
+    case 'pauseGame':
+      return say(`${court(action.courtId)}: game paused`)
+    case 'resumeGame':
+      return say(`${court(action.courtId)}: game resumed`)
     case 'resetNextUp':
       return say('Next up: back to automatic')
     case 'lockPartners': {

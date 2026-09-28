@@ -40,6 +40,7 @@ export function BoardScreen({ session }: { session: SessionState }) {
   const fillNextUpSpot = useSessionStore((s) => s.fillNextUpSpot)
   const startGame = useSessionStore((s) => s.startGame)
   const checkOutPlayer = useSessionStore((s) => s.checkOutPlayer)
+  const resumeGame = useSessionStore((s) => s.resumeGame)
   const removePlayer = useSessionStore((s) => s.removePlayer)
   // The player staff chose to remove from the session, while the confirm dialog is open.
   const [removing, setRemoving] = useState<number | null>(null)
@@ -199,7 +200,13 @@ export function BoardScreen({ session }: { session: SessionState }) {
     const court = session.courts.find((c) => c.id === courtId)
     fillCourtSpot(courtId, team, slot, inId)
     const lastSpot = (court?.teams?.flat().length ?? 0) === slotsPerTeam * 2 - 1
-    const after = !lastSpot ? '' : court?.teams && !court.notStarted ? ' The game is back on.' : ' Ready to start.'
+    const after = !lastSpot
+      ? ''
+      : court?.teams && !court.notStarted
+        ? court.pausedByStaff
+          ? ' The game stays paused until you resume it.'
+          : ' The game is back on.'
+        : ' Ready to start.'
     toast(`${session.players[inId].name} is on ${courtName(courtId)}.${after}`)
   }
 
@@ -277,6 +284,10 @@ export function BoardScreen({ session }: { session: SessionState }) {
             onSkillChange={changeSkill}
             onScore={(a, b) => handleScore(court.id, a, b)}
             onCancel={() => handleCancel(court.id)}
+            onResume={() => {
+              resumeGame(court.id)
+              toast(`${court.name}: game resumed.`)
+            }}
           />
         ))}
       </CourtGrid>

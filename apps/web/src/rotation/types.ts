@@ -62,6 +62,11 @@ export interface Court {
    */
   pausedAt?: number
   /**
+   * Staff paused this game (Pause game), so `pausedAt` is set and filling an open spot does not resume it:
+   * only Resume game does. Missing means it is paused only while a spot is open, if at all.
+   */
+  pausedByStaff?: true
+  /**
    * The players in `teams` were put on the court by staff, one spot at a time, and the game has not
    * started: no time runs and it cannot be finished. Start game starts it once every spot is filled.
    * Missing means a game in progress (or an open court).

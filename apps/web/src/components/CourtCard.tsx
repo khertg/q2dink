@@ -1,4 +1,4 @@
-import { Pause, Timer, Trophy } from 'lucide-react'
+import { Pause, Play, Timer, Trophy } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -64,6 +64,8 @@ interface Props {
   onScore?: (scoreA: number, scoreB: number) => void
   /** Cancel the game, or clear a court being set up. */
   onCancel?: () => void
+  /** Resume a game staff paused (Pause game in the court menu). */
+  onResume?: () => void
   /** While the session is not started or paused: why no game can start, shown instead of Start game. */
   stoppedReason?: string
   /** Staff only: where the court is in board order, for its ⋮ menu (rename, levels, move, close). */
@@ -120,6 +122,7 @@ export function CourtCard({
   onStart,
   onScore,
   onCancel,
+  onResume,
   stoppedReason,
   position,
 }: Props) {
@@ -259,6 +262,17 @@ export function CourtCard({
               <>
                 {short && (
                   <p className="text-center text-sm text-muted-foreground">Fill the open spot to finish the game.</p>
+                )}
+                {court.pausedByStaff && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2">
+                    <p className="text-sm text-muted-foreground">Game paused. Its time stands still.</p>
+                    {onResume && (
+                      <Button size="sm" onClick={onResume}>
+                        <Play aria-hidden="true" />
+                        Resume game
+                      </Button>
+                    )}
+                  </div>
                 )}
                 <ScoreDialog
                   courtName={court.name}

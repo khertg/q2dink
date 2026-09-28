@@ -1202,12 +1202,46 @@ export function fillCourtSpot(
   }
   const waited = { ...court.waited, ...waitedSeconds(back.queuedAt, [playerId], now) }
   let filled = withTeams(placed, placed.teams!, waited)
-  if (!isShort(filled, state.mode) && filled.pausedAt !== undefined) {
-    const { pausedAt, ...running } = filled
-    const pausedFor = now === undefined ? 0 : Math.max(0, Math.floor((now - pausedAt) / 1000))
-    filled = { ...running, pausedSeconds: (filled.pausedSeconds ?? 0) + pausedFor }
-  }
+  // A game staff paused stays paused until they resume it.
+  if (!isShort(filled, state.mode) && !filled.pausedByStaff) filled = unpaused(filled, now)
   return withoutQueuedAt({ ...moved, courts: back.courts.map((c) => (c.id === courtId ? filled : c)) }, [playerId])
+}
+
+/** The court with its pause over: the time it stood still is added to `pausedSeconds`. */
+function unpaused(court: Court, now: number | undefined): Court {
+  if (court.pausedAt === undefined) return court
+  const { pausedAt, ...running } = court
+  const pausedFor = now === undefined ? 0 : Math.max(0, Math.floor((now - pausedAt) / 1000))
+  return { ...running, pausedSeconds: (court.pausedSeconds ?? 0) + pausedFor }
+}
+
+/** The court's game in progress (not one being set up), or an error saying why there is none. */
+function gameOn(state: SessionState, courtId: number): Court {
+  const court = state.courts.find((c) => c.id === courtId)
+  if (!court?.teams) throw new Error(`Court ${courtId} has no game in progress`)
+  if (court.notStarted) throw new Error(`The game on ${court.name} has not started`)
+  return court
+}
+
+/**
+ * Staff pause the game on a court (Pause game): its time stands still, from now or from when an open spot already
+ * paused it, until they resume it. Pausing a paused game changes nothing. It can still be finished, with its time
+ * up to the pause.
+ */
+export function pauseGame(state: SessionState, courtId: number, now: number): SessionState {
+  const court = gameOn(state, courtId)
+  if (court.pausedByStaff) return state
+  const paused: Court = { ...court, pausedAt: court.pausedAt ?? now, pausedByStaff: true }
+  return { ...state, courts: state.courts.map((c) => (c.id === courtId ? paused : c)) }
+}
+
+/** Staff resume a game they paused. A game still missing a player stays paused until the spot is filled. */
+export function resumeGame(state: SessionState, courtId: number, now: number): SessionState {
+  const court = gameOn(state, courtId)
+  if (!court.pausedByStaff) return state
+  const { pausedByStaff: _staff, ...rest } = court
+  const resumed = isShort(rest, state.mode) ? rest : unpaused(rest, now)
+  return { ...state, courts: state.courts.map((c) => (c.id === courtId ? resumed : c)) }
 }
 
 /** Where a partner is, when they are not waiting: on a named court, or on a break. */
