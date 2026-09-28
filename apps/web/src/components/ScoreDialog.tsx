@@ -1,4 +1,4 @@
-import { Fragment, useState, type FormEvent, type ReactNode } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { PlayerTile, TeamBox, Versus } from '@/components/PlayerTile'
 import { Button } from '@/components/ui/button'
@@ -60,41 +60,37 @@ export interface ScoreField {
   onChange: (value: string) => void
   autoFocus?: boolean
   invalid?: boolean
-  /** Shown beside the field, e.g. the Record button next to the score being typed. */
-  action?: ReactNode
 }
 
 /**
- * Both teams as on the court: Blue on top, "vs", Orange below, each in its colour with its players
- * and its score field, so staff can see at a glance whose score they are typing.
+ * Both teams side by side: Blue, "vs", Orange, each in its colour with its players and its score field at the
+ * bottom, so staff can see at a glance whose score they are typing, and the pop-up is short enough to stay above a
+ * phone's keyboard.
  */
 export function ScoreTeams({ teamNames, fields }: { teamNames: [string[], string[]]; fields: [ScoreField, ScoreField] }) {
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
       {([0, 1] as const).map((team) => (
         <Fragment key={team}>
           {team === 1 && <Versus />}
           <TeamBox
             team={team}
             footer={
-              <div className="flex items-center justify-between gap-3 px-1">
+              <div className="space-y-1 px-1">
                 <Label htmlFor={fields[team].id}>{TEAM_NAMES[team]} score</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id={fields[team].id}
-                    type="number"
-                    inputMode="numeric"
-                    enterKeyHint="done"
-                    min={0}
-                    max={MAX_SCORE}
-                    className="w-20"
-                    autoFocus={fields[team].autoFocus}
-                    value={fields[team].value}
-                    onChange={(e) => fields[team].onChange(e.target.value)}
-                    aria-invalid={fields[team].invalid}
-                  />
-                  {fields[team].action}
-                </div>
+                <Input
+                  id={fields[team].id}
+                  type="number"
+                  inputMode="numeric"
+                  enterKeyHint="done"
+                  min={0}
+                  max={MAX_SCORE}
+                  className="h-11 w-full text-center text-lg font-semibold"
+                  autoFocus={fields[team].autoFocus}
+                  value={fields[team].value}
+                  onChange={(e) => fields[team].onChange(e.target.value)}
+                  aria-invalid={fields[team].invalid}
+                />
               </div>
             }
           >
@@ -136,13 +132,6 @@ function ScoreForm({
     onClose()
   }
 
-  // Beside the losing team's score (the box being typed), so the phone keyboard never hides it.
-  const record = (
-    <Button type="submit" aria-label="Record score" disabled={problem !== null}>
-      Record
-    </Button>
-  )
-
   return (
     <>
       <DialogHeader>
@@ -155,22 +144,8 @@ function ScoreForm({
         <ScoreTeams
           teamNames={teamNames}
           fields={[
-            {
-              id: 'score-a',
-              value: textA,
-              onChange: setTextA,
-              autoFocus: winner === 1,
-              invalid: typedInvalid(textA, a),
-              action: winner === 1 ? record : undefined,
-            },
-            {
-              id: 'score-b',
-              value: textB,
-              onChange: setTextB,
-              autoFocus: winner === 0,
-              invalid: typedInvalid(textB, b),
-              action: winner === 0 ? record : undefined,
-            },
+            { id: 'score-a', value: textA, onChange: setTextA, autoFocus: winner === 1, invalid: typedInvalid(textA, a) },
+            { id: 'score-b', value: textB, onChange: setTextB, autoFocus: winner === 0, invalid: typedInvalid(textB, b) },
           ]}
         />
         {message && (
@@ -178,6 +153,9 @@ function ScoreForm({
             {message}
           </p>
         )}
+        <Button type="submit" className="h-11 w-full" disabled={problem !== null}>
+          Record score
+        </Button>
       </form>
     </>
   )
