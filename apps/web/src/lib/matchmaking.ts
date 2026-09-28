@@ -23,5 +23,8 @@ export const MATCHMAKING_MODES: { value: MatchmakingMode; label: string; descrip
   },
 ]
 
+/** What the setup screen starts on for a new doubles session. */
+export const DEFAULT_MATCHMAKING: MatchmakingMode = 'winners'
+
 export const matchmakingLabel = (mode: MatchmakingMode) =>
   MATCHMAKING_MODES.find((m) => m.value === mode)?.label ?? mode

@@ -3,16 +3,22 @@ import { checkIn, choose, confirmLock, recordWin, startSession, startGame } from
 
 const MODES = ['Auto-balanced', 'Skill-separated', 'Winners vs. Losers', 'Mixed doubles']
 
-test('offers matchmaking modes for doubles only', async ({ page }) => {
+test('offers matchmaking modes for doubles only, starting on Winners vs. Losers', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByLabel('Matchmaking')).toBeVisible()
-  await expect(page.getByText('First come, first served, with teams split evenly by skill.')).toBeVisible()
+  await expect(page.getByLabel('Matchmaking')).toHaveText('Winners vs. Losers')
+  await expect(page.getByText('Ladder style: winners play winners and losers play losers.')).toBeVisible()
 
   await choose(page, 'Matchmaking', 'Mixed doubles')
   await expect(page.getByText(/Every team has one man and one woman/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Singles' }).click()
   await expect(page.getByLabel('Matchmaking')).toHaveCount(0)
+})
+
+test('a session created without choosing a mode is Winners vs. Losers', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Create session' }).click()
+  await expect(page.getByText('Winners vs. Losers', { exact: true })).toBeVisible()
 })
 
 for (const mode of MODES) {

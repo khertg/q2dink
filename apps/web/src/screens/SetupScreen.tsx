@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MATCHMAKING_MODES } from '@/lib/matchmaking'
+import { DEFAULT_MATCHMAKING, MATCHMAKING_MODES } from '@/lib/matchmaking'
 import {
   DEFAULT_AVG_GAME_MINUTES,
   isValidGameMinutes,
@@ -42,7 +42,7 @@ function SetupCard() {
   const [location, setLocation] = useState('')
   const [courts, setCourts] = useState('4')
   const [mode, setMode] = useState<GameMode>('doubles')
-  const [matchmaking, setMatchmaking] = useState<MatchmakingMode>('balanced')
+  const [matchmaking, setMatchmaking] = useState<MatchmakingMode>(DEFAULT_MATCHMAKING)
   const [gameMinutes, setGameMinutes] = useState(String(DEFAULT_AVG_GAME_MINUTES))
 
   const courtCount = Number(courts)

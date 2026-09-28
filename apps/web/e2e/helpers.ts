@@ -53,7 +53,7 @@ export async function startSession(
     courts?: number
     mode?: 'Doubles' | 'Singles'
     gameMinutes?: number
-    /** Option label, e.g. 'Mixed doubles'. Defaults to Auto-balanced. */
+    /** Option label, e.g. 'Mixed doubles'. Doubles default to Auto-balanced here (the app itself starts on Winners vs. Losers). */
     matchmaking?: string
   } = {},
 ) {
@@ -61,7 +61,7 @@ export async function startSession(
   await page.getByLabel('Session name').fill(location)
   await page.getByLabel('Number of courts (1 to 15)').fill(String(courts))
   await page.getByRole('button', { name: mode }).click()
-  if (matchmaking) await choose(page, 'Matchmaking', matchmaking)
+  if (mode === 'Doubles') await choose(page, 'Matchmaking', matchmaking ?? 'Auto-balanced')
   await page.getByLabel('Average game length (minutes)').fill(String(gameMinutes))
   await page.getByRole('button', { name: 'Create session' }).click()
   await expect(page.getByRole('heading', { name: location })).toBeVisible()
