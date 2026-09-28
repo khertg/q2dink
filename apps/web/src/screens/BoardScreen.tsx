@@ -14,7 +14,7 @@ import { removedMessage } from '@/lib/removal'
 import { levelLabel, sessionScale } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
 import { locksBrokenBy } from '@/lib/lockGuard'
-import { breakNote, lockMarks, unlockedSentence } from '@/lib/partners'
+import { lockMarks, unlockedSentence } from '@/lib/partners'
 import { useLockGuard } from '@/lib/useLockGuard'
 import type { SessionAction } from '@/store/actions'
 import { usePartnerOption } from '@/lib/usePartnerOption'
@@ -185,11 +185,13 @@ export function BoardScreen({ session }: { session: SessionState }) {
     })
   }
 
-  /** A waiting player takes a break; their partner (if locked) now waits for them. */
+  /** A waiting player takes a break. A break ends their partner locks, so staff are asked first. */
   function handleQueueBreak(id: number) {
-    checkOutPlayer(id)
-    const note = breakNote(useSessionStore.getState().session ?? session, id)
-    if (note) toast(note)
+    const name = session.players[id].name
+    guard({ type: 'checkOut', playerId: id }, `${name} taking a break`, (pairs) => {
+      checkOutPlayer(id)
+      if (pairs.length > 0) toast(`${name} is on a break.` + unlockedNote(pairs))
+    })
   }
 
   /** Put someone in an open spot on a court: a game missing a player, or a court being set up by hand. */
@@ -218,11 +220,8 @@ export function BoardScreen({ session }: { session: SessionState }) {
         return
       }
       const instead = standIn === undefined ? '' : `${session.players[standIn].name} is next up instead`
-      const waits = onBreak ? breakNote(useSessionStore.getState().session ?? session, outId) : ''
       toast(
-        (onBreak ? `${out} is on a break.${instead ? ` ${instead}.` : ''}` : `${instead} of ${out}.`) +
-          unlockedNote(pairs) +
-          (waits ? ` ${waits}` : ''),
+        (onBreak ? `${out} is on a break.${instead ? ` ${instead}.` : ''}` : `${instead} of ${out}.`) + unlockedNote(pairs),
       )
     })
   }

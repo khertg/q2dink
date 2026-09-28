@@ -101,6 +101,7 @@ describe('describeAction', () => {
     const locked = apply(waiting, { type: 'lockPartners', a: 5, b: 6 })
     expect(say(waiting, { type: 'lockPartners', a: 5, b: 6 })).toBe('Locked Eve & Fay as partners')
     expect(say(locked, { type: 'unlockPartners', playerId: 6 })).toBe('Unlocked Eve & Fay')
+    expect(say(locked, { type: 'checkOut', playerId: 5 })).toMatch(/\. Unlocked Eve & Fay$/)
   })
 
   it('says an undo was an undo, and gives every action its type as the kind', () => {

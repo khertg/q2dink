@@ -299,16 +299,42 @@ test.describe('Lock now, holding for a partner, and asking before unlocking', ()
     await expect(page.getByRole('img', { name: /^Locked with/ })).toHaveCount(0)
   })
 
-  test('a locked player taking a break: their partner waits for them, and says so', async ({ page }) => {
+  test('a locked player taking a break: staff are asked, the lock ends and their partner keeps playing', async ({ page }) => {
     await startSession(page)
     await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay'])
     await startGame(page)
     await openLockForm(page, 'Eve', 'Fay')
     await confirmLock(page)
     await page.getByRole('tab', { name: 'Board' }).click()
-    await page.getByRole('button', { name: 'Eve menu' }).click()
-    await page.locator('[data-slot="popover-content"]').getByRole('button', { name: 'Take a break' }).click()
-    await expect(page.getByText('Fay waits for Eve to come back from the break.')).toBeVisible()
-    await expect(queueRow(page, 'Fay')).toContainText('Waits for Eve')
+    const takeBreak = async () => {
+      await page.getByRole('button', { name: 'Eve menu' }).click()
+      await page.locator('[data-slot="popover-content"]').getByRole('button', { name: 'Take a break' }).click()
+    }
+    const ask = page.getByRole('dialog', { name: 'Unlock Eve and Fay?' })
+
+    // Cancel: nothing changes.
+    await takeBreak()
+    await ask.getByRole('button', { name: 'Cancel' }).click()
+    await expect(queueRow(page, 'Eve')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Locked with Fay' })).toBeVisible()
+
+    await takeBreak()
+    await ask.getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText('Eve is on a break. Eve and Fay are no longer locked partners.')).toBeVisible()
+    await expect(queueRow(page, 'Fay')).not.toContainText('Waits for')
+    await expect(page.getByRole('img', { name: /^Locked with/ })).toHaveCount(0)
+  })
+
+  test('a break from Check-in also ends a lock still waiting to start, after asking', async ({ page }) => {
+    await startSession(page)
+    await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee', 'Eve', 'Fay'])
+    await startGame(page)
+    await openLockForm(page, 'Eve', 'Ann')
+    await confirmLock(page, 'Wait for 1 game')
+    await expect(page.getByRole('img', { name: 'Will be locked with Ann' }).first()).toBeVisible()
+    await waitingAction(page, 'Eve', 'Take a break')
+    await page.getByRole('dialog', { name: /^Unlock (Eve and Ann|Ann and Eve)\?$/ }).getByRole('button', { name: 'Continue' }).click()
+    await expect(page.getByText(/^Eve is on a break\. .+ are no longer locked partners\.$/)).toBeVisible()
+    await expect(page.getByRole('img', { name: /locked with/i })).toHaveCount(0)
   })
 })

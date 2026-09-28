@@ -1697,12 +1697,12 @@ describe('partner locks that do not take effect at once', () => {
   })
 
   it('an in-force pair never lets the later partner skip people who were waiting', () => {
-    // Locked while both waited, then one goes on a break and returns at the back.
+    // One came back from a break at the back, then the two are locked.
     let s = withPlayers(createSession('doubles', 1), 8)
-    s = lockPartners(s, 1, 2)
     s = checkOut(s, 2)
     s = checkIn(s, player(2)) // queue: 1, 3..8, 2
-    expect(s.queue).toEqual([1, 3, 4, 5, 6, 7, 8, 2])
+    s = lockPartners(s, 1, 2)
+    expect(s.partners).toEqual([[1, 2]])
     // The pair stands at 2's spot (the later one), behind everyone who was waiting.
     expect(nextGroup(s)!.players.slice().sort()).toEqual([3, 4, 5, 6])
   })
@@ -2067,12 +2067,32 @@ describe('lock scenarios: Lock now, holding, and the pair’s spot', () => {
     expect(s.queue.at(-1)).toBe(6)
   })
 
-  it('row 27: an active pair where one takes a break: the other holds', () => {
+  it('row 27: an active pair where one takes a break: the lock ends and the other keeps playing', () => {
     let s = lockPartners(withPlayers(createSession('doubles', 1), 6), 1, 2)
     s = checkOut(s, 2)
-    expect(s.partners).toEqual([[1, 2]])
-    expect(heldPlayers(s)).toEqual([1])
-    expect(nextGroup(s)!.players).not.toContain(1)
+    expect(s.partners).toEqual([])
+    expect(heldPlayers(s)).toEqual([])
+    expect(nextGroup(s)!.players).toContain(1)
+  })
+
+  it('a break also ends a lock still waiting to start, and only that player’s locks', () => {
+    let s = startGame(withPlayers(createSession('doubles', 1), 8), 1, { now: 0 })
+    const [onCourt] = s.courts[0].teams![0]
+    const [a, b, c] = s.queue
+    s = lockPartners(s, a, onCourt) // waiting lock
+    s = lockPartners(s, b, c)
+    s = checkOut(s, a)
+    expect(s.pendingPartners).toBeUndefined()
+    expect(s.partners).toEqual([[b, c]])
+  })
+
+  it('a break from Next up ends the lock too', () => {
+    let s = withPlayers(createSession('doubles', 1), 8)
+    s = lockPartners(s, 1, 2)
+    const [out] = nextGroup(s)!.players
+    s = dropFromNextUp(s, out, { onBreak: true })
+    expect(s.onBreak).toContain(out)
+    expect(s.partners).toEqual([])
   })
 
   it('row 17: the partner’s game is cancelled (players back to the front): the pair stands at the later spot', () => {
@@ -2085,7 +2105,7 @@ describe('lock scenarios: Lock now, holding, and the pair’s spot', () => {
     expect(together(t, ann, bob)).toBe(true)
   })
 
-  it('row 31: a waiting lock comes into force after both have played; from then the pair holds for each other', () => {
+  it('row 31: a waiting lock comes into force after both have played; from then the pair plays together', () => {
     const s = fillCourts(withPlayers(createSession('doubles', 2), 8))
     const [ann] = s.courts[0].teams!.flat()
     const [bob] = s.courts[1].teams!.flat()
@@ -2094,8 +2114,7 @@ describe('lock scenarios: Lock now, holding, and the pair’s spot', () => {
     expect(t.partners).toEqual([])
     t = recordScore(t, 2, 11, 3, { now: 2000 }).state
     expect(t.partners).toEqual([[ann, bob]])
-    t = checkOut(t, bob)
-    expect(heldPlayers(t)).toEqual([ann])
+    expect(together(t, ann, bob)).toBe(true)
   })
 
   it('row 5: a partner on a court being set up: Lock now holds; clearing the court brings the pair together', () => {

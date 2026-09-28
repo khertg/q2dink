@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { checkIn, checkOut, createSession, fillNextUpSpot, lockPartners, removePlayer, startGame } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import {
-  breakNote,
   brokenLocks,
   heldFor,
   lockCandidates,
@@ -133,17 +132,6 @@ describe('lockMarks', () => {
     const marks = lockMarks(s)
     expect(marks.get(11)?.colour).toBe(6)
     expect(marks.get(13)?.colour).toBe(1)
-  })
-})
-
-describe('breakNote', () => {
-  it('says the partner waits when a locked player takes a break, and nothing otherwise', () => {
-    const locked = lockPartners(withPlayers(4), 1, 2)
-    expect(breakNote(checkOut(locked, 1), 1)).toBe('P2 waits for P1 to come back from the break.')
-    expect(breakNote(checkOut(withPlayers(4), 1), 1)).toBe('')
-    // A lock still waiting to start does not make anyone wait.
-    const pending = lockPartners(checkOut(withPlayers(4), 2), 1, 2)
-    expect(breakNote(checkOut(pending, 1), 1)).toBe('')
   })
 })
 

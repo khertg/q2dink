@@ -30,7 +30,8 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { SkillBadge } from '@/components/SkillBadge'
 import { useSkillEditor } from '@/lib/useSkillEditor'
 import { locksBrokenBy } from '@/lib/lockGuard'
-import { breakNote, lockedMessage, lockMarks, unlockedSentence } from '@/lib/partners'
+import { useLockGuard } from '@/lib/useLockGuard'
+import { lockedMessage, lockMarks, unlockedSentence } from '@/lib/partners'
 import { removedMessage } from '@/lib/removal'
 import { usePartnerOption } from '@/lib/usePartnerOption'
 import { activeIds, playingIds } from '@/rotation/engine'
@@ -183,6 +184,17 @@ export function CheckInScreen({ session }: { session: SessionState }) {
 
   const playing = playingIds(session).length
 
+  const { guard, dialog: lockGuardDialog } = useLockGuard(session)
+
+  /** A waiting player takes a break. A break ends their partner locks, so staff are asked first. */
+  function handleBreak(id: number) {
+    const name = session.players[id].name
+    guard({ type: 'checkOut', playerId: id }, `${name} taking a break`, (pairs) => {
+      checkOutPlayer(id)
+      if (pairs.length > 0) toast(`${name} is on a break. ${unlockedSentence(session, pairs)}`)
+    })
+  }
+
   function handleRemove(id: number) {
     const message = removedMessage(session, id)
     const unlocked = unlockedSentence(session, locksBrokenBy(session, { type: 'removePlayer', playerId: id, now: 0 }))
@@ -236,11 +248,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                   <SkillBadge player={session.players[id]} display="name" onChange={(skill) => changeSkill(id, skill)} />
                   <WaitingPlayerMenu
                     name={session.players[id].name}
-                    onTakeBreak={() => {
-                      checkOutPlayer(id)
-                      const note = breakNote(useSessionStore.getState().session ?? session, id)
-                      if (note) toast(note)
-                    }}
+                    onTakeBreak={() => handleBreak(id)}
                     onRemoveFromSession={() => setRemoving(id)}
                     partner={partnerFor?.(id)}
                   />
@@ -255,6 +263,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
 
       <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
       <RemovePlayerDialog session={session} playerId={removing} onClose={() => setRemoving(null)} onConfirm={handleRemove} />
+      {lockGuardDialog}
 
       {session.onBreak.length > 0 && (
         <Card>

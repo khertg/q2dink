@@ -93,16 +93,6 @@ export function heldFor(session: SessionState, id: number): { partner: string; w
   return { partner: nameOf(session, partner), where: court ? `on ${court.name}` : 'on a break' }
 }
 
-/**
- * After a player went on a break: the words saying their partner now waits for them (R5), or '' when nobody waits
- * (no lock in force, or the partner is not waiting either).
- */
-export function breakNote(session: SessionState, id: number): string {
-  const partner = partnerOf(session.partners, id)
-  if (partner === undefined || !session.queue.includes(partner)) return ''
-  return `${nameOf(session, partner)} waits for ${nameOf(session, id)} to come back from the break.`
-}
-
 /** Every lock, in force or waiting, as a pair. */
 const allLocks = (s: Pick<SessionState, 'partners' | 'pendingPartners'>) => [
   ...s.partners,

@@ -361,7 +361,10 @@ export function checkIn(state: SessionState, player: RosterPlayer, now?: number)
   )
 }
 
-/** Move a waiting player to a break. Players on a court must be replaced instead. */
+/**
+ * Move a waiting player to a break. Players on a court must be replaced instead. Their partner locks end, in force
+ * or waiting, so a partner keeps playing rather than waiting for them.
+ */
 export function checkOut(state: SessionState, playerId: number): SessionState {
   if (isPlaying(state, playerId)) {
     throw new Error('Player is on a court; use replacePlayer first')
@@ -369,7 +372,7 @@ export function checkOut(state: SessionState, playerId: number): SessionState {
   if (!state.queue.includes(playerId)) return state
   return withoutQueuedAt(
     {
-      ...withoutPickIncluding(state, playerId),
+      ...withoutLocks(withoutPickIncluding(state, playerId), [playerId]),
       queue: state.queue.filter((id) => id !== playerId),
       onBreak: [...state.onBreak, playerId],
     },

@@ -71,12 +71,18 @@ describe('locksBrokenBy: what would end a lock (asked first)', () => {
     expect(locksBrokenBy(s, { type: 'removePlayer', playerId: a, now: 1 })).toEqual([[a, b]])
   })
 
-  it('rows 15, 27, 29: a game ending, a break, and an explicit unlock ask nothing', () => {
+  it('rows 15, 29: a game ending and an explicit unlock ask nothing', () => {
     const { s, a } = lockedOnCourt()
     expect(locksBrokenBy(s, { type: 'recordScore', courtId: 1, scoreA: 11, scoreB: 3, now: 1 })).toEqual([])
     expect(locksBrokenBy(s, { type: 'unlockPartners', playerId: a })).toEqual([])
-    const waiting = lockPartners(withPlayers(4), 1, 2)
-    expect(locksBrokenBy(waiting, { type: 'checkOut', playerId: 1 })).toEqual([])
+  })
+
+  it('row 27: a break asks first, for a lock in force and for one still waiting to start', () => {
+    const inForce = lockPartners(withPlayers(4), 1, 2)
+    expect(locksBrokenBy(inForce, { type: 'checkOut', playerId: 1 })).toEqual([[1, 2]])
+    const waiting = lockPartners(checkOut(withPlayers(4), 2), 1, 2)
+    expect(locksBrokenBy(waiting, { type: 'checkOut', playerId: 1 })).toEqual([[1, 2]])
+    expect(locksBrokenBy(withPlayers(4), { type: 'checkOut', playerId: 1 })).toEqual([])
   })
 
   it('a change that no longer applies ends nothing', () => {
