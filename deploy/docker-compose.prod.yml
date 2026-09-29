@@ -44,7 +44,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks: [internal]
+    # internal: Caddy and the database. egress: outgoing calls only (ElevenLabs for voice call-outs); no port is
+    # published, so the API is still reached only through Caddy.
+    networks: [internal, egress]
 
   db:
     image: postgres:16-alpine
@@ -71,3 +73,4 @@ networks:
   edge:
   internal:
     internal: true # no route to the internet, so the database and API cannot be reached from outside
+  egress: # lets the API call out (ElevenLabs); nothing can connect in, as the API publishes no port
