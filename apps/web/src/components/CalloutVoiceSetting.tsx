@@ -143,6 +143,11 @@ export function CalloutVoiceSetting() {
               </SelectContent>
             </Select>
             {list.state === 'loading' && <p className="text-xs text-muted-foreground">Loading the account’s voices…</p>}
+            {list.state === 'loaded' && list.voices.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Only your ElevenLabs <em>My voices</em> are listed. Add voices in ElevenLabs, or paste a voice id below.
+              </p>
+            )}
             {list.state === 'unlistable' && (
               <p className="text-xs text-muted-foreground">
                 The server’s ElevenLabs key may not list voices (it needs the Voices permission). Paste a voice id below.

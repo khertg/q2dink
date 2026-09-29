@@ -20,25 +20,25 @@ interface ElevenLabsVoice {
 }
 
 /**
- * The account's voices as the club's choice lists them: default voices first, then by name. Voice Library voices are
- * marked `paidOnly` unless the account is known to be on a paid plan (`paidPlan`).
+ * The account's own voices (its "My voices": cloned, designed, or added from the Voice Library), by name, as the club's
+ * choice lists them. ElevenLabs' built-in default voices ("premade") are left out; the picker offers only its default,
+ * Rachel, above them. Voice Library voices are marked `paidOnly` unless the account is known to be on a paid plan.
  */
 export function toVoiceOptions(raw: unknown, paidPlan = false): VoiceOption[] {
   const voices = (raw as { voices?: unknown } | null)?.voices
   if (!Array.isArray(voices)) return []
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
-  const options = (voices as ElevenLabsVoice[]).flatMap((v): (VoiceOption & { premade: boolean })[] => {
+  const options = (voices as ElevenLabsVoice[]).flatMap((v): VoiceOption[] => {
     const id = text(v.voice_id)
     const name = text(v.name)
-    if (!id || !name || !isVoiceId(id)) return []
+    if (!id || !name || !isVoiceId(id) || v.category === 'premade') return []
     const labels = v.labels ?? {}
     const description =
       text(labels.description) ?? ([labels.accent, labels.age, labels.gender].map(text).filter(Boolean).join(', ') || undefined)
-    // Voice Library voices ("professional") need a paid plan through the API; the account's own and default ones do not.
-    return [{ id, name, description, paidOnly: !paidPlan && v.category === 'professional', premade: v.category === 'premade' }]
+    // Voice Library voices ("professional") need a paid plan through the API; the account's own ones do not.
+    return [{ id, name, description, paidOnly: !paidPlan && v.category === 'professional' }]
   })
-  options.sort((a, b) => Number(b.premade) - Number(a.premade) || a.name.localeCompare(b.name))
-  return options.map(({ premade: _premade, ...option }) => option)
+  return options.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** How many call-outs are kept, and how many bytes at most (a call-out is a few tens of KB of MP3). */

@@ -228,3 +228,19 @@ test('each speaker’s wording is changed right there: a court’s own, a player
   await voiceDialog.getByRole('button', { name: 'Test voice' }).click()
   await expect.poll(lastSaid).toBe('Testing Court 1 for Ann')
 })
+
+test('with no voices of its own, the account’s list offers the default and says how to add more', async ({ page, request }) => {
+  const club = uniqueClub('NoVoices')
+  await apiCreateClub(request, club)
+  await page.route('**/api/voice', async (route) => {
+    const response = await route.fetch()
+    await route.fulfill({ response, json: { ...(await response.json()), elevenLabs: true } })
+  })
+  await page.route('**/api/voice/options', (route) => route.fulfill({ json: { listable: true, voices: [] } }))
+  await signIn(page, club)
+  await expect(page.getByText('Only your ElevenLabs My voices are listed.')).toBeVisible()
+  const picker = page.getByRole('combobox', { name: 'ElevenLabs voice' })
+  await picker.click()
+  await expect(page.getByRole('option')).toHaveCount(1)
+  await expect(page.getByRole('option', { name: /Rachel \(default\)/ })).toBeVisible()
+})

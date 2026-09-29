@@ -174,7 +174,7 @@ describe('the club’s ElevenLabs voice', () => {
     await app.close()
   })
 
-  it('lists the voices the key can use, default ones first, marking library voices', async () => {
+  it('lists only the account’s own voices, by name, leaving out ElevenLabs’ defaults and marking library voices', async () => {
     const list = {
       voices: [
         { voice_id: 'lib1', name: 'Zed', category: 'professional', labels: { accent: 'british', gender: 'male' } },
@@ -191,7 +191,6 @@ describe('the club’s ElevenLabs voice', () => {
     expect(await options()).toEqual({
       listable: true,
       voices: [
-        { id: 'pre1', name: 'Rachel', description: 'calm', paidOnly: false },
         { id: 'own1', name: 'Anna', paidOnly: false },
         { id: 'lib1', name: 'Zed', description: 'british, male', paidOnly: true },
       ],
