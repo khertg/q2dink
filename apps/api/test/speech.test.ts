@@ -278,35 +278,30 @@ describe('the club’s wording, in its own table', () => {
   const putVoice = (app: FastifyInstance, token: string, payload: unknown) =>
     app.inject({ method: 'PUT', url: '/api/voice', headers: bearer(token), payload: payload as object })
 
-  it('keeps a court’s and a player’s own wording as rows of that club, replaced as a whole', async () => {
+  it('keeps one row per text of that club, replaced as a whole, and ignores an older app’s court and player wording', async () => {
     const app = await appWith(audioReply())
     const a = await createClub(app)
     const b = await createClub(app)
     const texts = {
       testVoice: 'Hello from {court}',
-      courts: { 'Center Court': { courtCall: '{players}, to the center!' } },
-      players: { Ann: { playerWaiting: '{name}, your table is ready' } },
+      courtCall: '{bluePlayer1} and {bluePlayer2}, to {court}!',
+      courts: { 'Center Court': { courtCall: 'x' } },
+      players: { Ann: { playerWaiting: 'y' } },
     }
     const put = await putVoice(app, a.token, { voice: 'elevenlabs', texts })
-    expect(put.json().texts).toEqual({
-      testVoice: 'Hello from {court}',
-      courts: { 'center court': { courtCall: '{players}, to the center!' } },
-      players: { ann: { playerWaiting: '{name}, your table is ready' } },
-    })
+    expect(put.statusCode).toBe(200)
+    expect(put.json().texts).toEqual({ testVoice: 'Hello from {court}', courtCall: '{bluePlayer1} and {bluePlayer2}, to {court}!' })
     const rows = await db.query<{ club_slug: string; scope: string; target: string; key: string }>(
-      'select club_slug, scope, target, key from club_callout_texts order by scope, target, key',
+      'select club_slug, scope, target, key from club_callout_texts order by key',
     )
     expect(rows.rows).toEqual([
+      { club_slug: a.slug, scope: 'club', target: '', key: 'courtCall' },
       { club_slug: a.slug, scope: 'club', target: '', key: 'testVoice' },
-      { club_slug: a.slug, scope: 'court', target: 'center court', key: 'courtCall' },
-      { club_slug: a.slug, scope: 'player', target: 'ann', key: 'playerWaiting' },
     ])
     expect((await app.inject({ method: 'GET', url: '/api/voice', headers: bearer(b.token) })).json().texts).toEqual({})
 
-    await putVoice(app, a.token, { voice: 'elevenlabs', texts: { players: { bob: { playerCourt: 'Bob, go' } } } })
-    expect((await db.query('select 1 from club_callout_texts')).rows).toHaveLength(1)
-    const many = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`c${i}`, { courtGame: 'x' }]))
-    expect((await putVoice(app, a.token, { voice: 'elevenlabs', texts: { courts: many } })).statusCode).toBe(400)
+    await putVoice(app, a.token, { voice: 'elevenlabs', texts: { nextUp: 'Up: {players}' } })
+    expect((await db.query('select key from club_callout_texts')).rows).toEqual([{ key: 'nextUp' }])
     await app.close()
   })
 })

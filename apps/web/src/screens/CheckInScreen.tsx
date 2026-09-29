@@ -15,7 +15,6 @@ import { LockPartnerDialog } from '@/components/LockPartnerDialog'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import { RosterCheckIn } from '@/components/RosterCheckIn'
 import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
-import { CalloutTextsDialog } from '@/components/CalloutTextsDialog'
 import {
   Select,
   SelectContent,
@@ -174,8 +173,6 @@ export function CheckInScreen({ session }: { session: SessionState }) {
   const { texts } = useClubVoice()
   const changeSkill = useSkillEditor()
   const clubSlug = useClubAuth((s) => s.club?.slug)
-  // Signed in to a club: a waiting player's Call out wording can be changed from their menu.
-  const [wordingFor, setWordingFor] = useState<string | null>(null)
   const roster = useLiveQuery(() => listRoster(clubSlug), [clubSlug])
   // Bring in players the club's other devices saved, as soon as check-in opens.
   useEffect(() => requestRosterSync(), [clubSlug])
@@ -260,7 +257,6 @@ export function CheckInScreen({ session }: { session: SessionState }) {
                     onRemoveFromSession={() => setRemoving(id)}
                     partner={partnerFor?.(id)}
                     callout={playerCallout(session, id, lanes, texts)}
-                    onEditCallout={clubSlug ? () => setWordingFor(session.players[id].name) : undefined}
                   />
                 </li>
               ))}
@@ -272,11 +268,7 @@ export function CheckInScreen({ session }: { session: SessionState }) {
       {session.mode === 'doubles' && <PartnersCard session={session} />}
 
       <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
-      <CalloutTextsDialog
-        scope={{ kind: 'player', name: wordingFor ?? '' }}
-        open={wordingFor !== null}
-        onOpenChange={(open) => !open && setWordingFor(null)}
-      />
+
       <RemovePlayerDialog session={session} playerId={removing} onClose={() => setRemoving(null)} onConfirm={handleRemove} />
       {lockGuardDialog}
 

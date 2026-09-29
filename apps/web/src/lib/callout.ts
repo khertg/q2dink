@@ -1,12 +1,4 @@
-import {
-  CALLOUT_TEXTS,
-  calloutTarget,
-  type CalloutPlaceholder,
-  type CalloutTextKey,
-  type CalloutTexts,
-  type CourtTexts,
-  type PlayerTexts,
-} from '@q2dink/shared'
+import { CALLOUT_TEXTS, type CalloutPlaceholder, type CalloutTextKey, type CalloutTexts } from '@q2dink/shared'
 import { playerStatuses } from '@/lib/playerStatus'
 import { levelLabel, sessionScale } from '@/lib/skill'
 import { TEAM_NAMES } from '@/lib/teams'
@@ -16,7 +8,7 @@ import type { Court, SessionState } from '@/rotation/types'
 /**
  * What staff have read out loud when they tap a speaker button (see announcer.ts): the next group, a
  * court's players, or one player. Plain sentences, written for a voice rather than a screen, in the club's own
- * wording (CalloutTexts: a player's or a court's own over the club's) or the default one (CALLOUT_TEXTS in shared),
+ * wording (CalloutTexts) or the default one (CALLOUT_TEXTS in shared),
  * with placeholders filled in.
  */
 
@@ -41,17 +33,9 @@ export function fillCallout(template: string, values: Values): string {
   )
 }
 
-/** Whose wording to use: a court's or a player's own comes before the club's. */
-interface Target {
-  court?: string
-  player?: string
-}
-
-/** The wording of a call-out: the player's own, else the court's own, else the club's, else the default. */
-export function wordingOf(key: CalloutTextKey, texts: CalloutTexts | undefined, target: Target = {}): string {
-  const player = target.player ? texts?.players?.[calloutTarget(target.player)]?.[key as keyof PlayerTexts] : undefined
-  const court = target.court ? texts?.courts?.[calloutTarget(target.court)]?.[key as keyof CourtTexts] : undefined
-  return player ?? court ?? texts?.[key] ?? CALLOUT_TEXTS[key].text
+/** The club's wording of a call-out, or its default. */
+export function wordingOf(key: CalloutTextKey, texts: CalloutTexts | undefined): string {
+  return texts?.[key] ?? CALLOUT_TEXTS[key].text
 }
 
 /** Placeholders in a wording that its call-out does not have (a typo such as {nmae}), for the editor to warn about. */
@@ -65,6 +49,10 @@ const EXAMPLE: Record<CalloutPlaceholder, string> = {
   players: 'Ann and Bob, against Cal and Dee',
   bluePlayers: 'Ann and Bob',
   orangePlayers: 'Cal and Dee',
+  bluePlayer1: 'Ann',
+  bluePlayer2: 'Bob',
+  orangePlayer1: 'Cal',
+  orangePlayer2: 'Dee',
   court: 'Court 1',
   level: '3.5 plus',
   name: 'Ann',
@@ -73,9 +61,9 @@ const EXAMPLE: Record<CalloutPlaceholder, string> = {
   place: '3',
 }
 
-/** The wording filled with example names (or the court's or player's own name when it is theirs), for Test. */
-export function calloutSample(template: string, target: { court?: string; name?: string } = {}): string {
-  return spoken(fillCallout(template, { ...EXAMPLE, ...(target.court ? { court: target.court } : {}), ...(target.name ? { name: target.name } : {}) }))
+/** The wording filled with example names, for the editor's Test. */
+export function calloutSample(template: string): string {
+  return spoken(fillCallout(template, EXAMPLE))
 }
 
 /** The club's Test voice sentence, with any placeholders filled with the examples. */
@@ -91,49 +79,27 @@ export function changedTexts(draft: Partial<Record<CalloutTextKey, string>>): Pa
   return texts
 }
 
-type Overrides = 'courts' | 'players'
-
-/** The next CalloutTexts with one court's or player's own wording set (or cleared, with an empty text). */
-function setTargetText(texts: CalloutTexts, map: Overrides, name: string, key: string, text: string): CalloutTexts {
-  const target = calloutTarget(name)
-  const group: Record<string, string> = { ...texts[map]?.[target] }
-  if (text.trim()) group[key] = text.trim()
-  else delete group[key]
-  const next: Record<string, Record<string, string>> = { ...texts[map] }
-  if (Object.keys(group).length > 0) next[target] = group
-  else delete next[target]
-  const { [map]: _dropped, ...rest } = texts
-  return Object.keys(next).length > 0 ? { ...rest, [map]: next } : rest
-}
-
-export const setCourtText = (texts: CalloutTexts, court: string, key: keyof CourtTexts, text: string) =>
-  setTargetText(texts, 'courts', court, key, text)
-export const setPlayerText = (texts: CalloutTexts, player: string, key: keyof PlayerTexts, text: string) =>
-  setTargetText(texts, 'players', player, key, text)
-
-/** The next CalloutTexts with a court's or player's own wording moved to their new name (names are copies). */
-function renameTarget(texts: CalloutTexts, map: Overrides, from: string, to: string): CalloutTexts {
-  const old = calloutTarget(from)
-  const renamed = calloutTarget(to)
-  const group = texts[map]?.[old]
-  if (!group || old === renamed) return texts
-  const next: Record<string, Record<string, string>> = { ...texts[map] }
-  delete next[old]
-  next[renamed] = { ...next[renamed], ...group }
-  return { ...texts, [map]: next }
-}
-
-export const renameCourtTexts = (texts: CalloutTexts, from: string, to: string) => renameTarget(texts, 'courts', from, to)
-export const renamePlayerTexts = (texts: CalloutTexts, from: string, to: string) => renameTarget(texts, 'players', from, to)
-
 const nameOf = (session: SessionState, id: number) => session.players[id]?.name ?? 'Player'
 
-/** A game's players: {players} (a team with nobody on it is left out), {bluePlayers} and {orangePlayers}. */
+/**
+ * A game's players: {players} (a team with nobody on it is left out), {bluePlayers} and {orangePlayers}, and each player
+ * by team and board order, {bluePlayer1} to {orangePlayer2} (the 2s are empty in singles or with an open spot).
+ */
 function teamValues(session: SessionState, teams: readonly (readonly number[])[]): Values | null {
-  const names = teams.map((team) => team.map((id) => nameOf(session, id)).join(' and '))
+  const players = teams.map((team) => team.map((id) => nameOf(session, id)))
+  const names = players.map((team) => team.join(' and '))
   const sides = names.filter((side) => side !== '')
   if (sides.length === 0) return null
-  return { players: sides.join(', against '), bluePlayers: names[0] ?? '', orangePlayers: names[1] ?? '' }
+  const [blue = [], orange = []] = players
+  return {
+    players: sides.join(', against '),
+    bluePlayers: names[0] ?? '',
+    orangePlayers: names[1] ?? '',
+    bluePlayer1: blue[0] ?? '',
+    bluePlayer2: blue[1] ?? '',
+    orangePlayer1: orange[0] ?? '',
+    orangePlayer2: orange[1] ?? '',
+  }
 }
 
 /** One player's own team in a game: {team} (Blue or Orange) and {partner} (their teammates; empty in singles). */
@@ -180,7 +146,7 @@ export function courtCallout(
   const values = teams && teamValues(session, teams)
   if (!values) return null
   const key = court.teams && !court.notStarted ? 'courtGame' : 'courtCall'
-  const wording = wordingOf(key, texts, { court: court.name })
+  const wording = wordingOf(key, texts)
   return spoken(fillCallout(wording, { ...values, court: court.name, level: levelOf(session, court.levels) }))
 }
 
@@ -189,7 +155,7 @@ export function playerCallout(session: SessionState, id: number, lanes: Lane[], 
   const status = playerStatuses(session, lanes).find((s) => s.id === id)
   if (!status) return null
   const name = nameOf(session, id)
-  const say = (key: CalloutTextKey, values: Values) => spoken(fillCallout(wordingOf(key, texts, { player: name }), { name, ...values }))
+  const say = (key: CalloutTextKey, values: Values) => spoken(fillCallout(wordingOf(key, texts), { name, ...values }))
   switch (status.place) {
     case 'court': {
       const court = session.courts.find((c) => c.id === status.courtId)

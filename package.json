@@ -1,7 +1,7 @@
 {
   "name": "q2dink",
   "private": true,
-  "version": "1.32.2",
+  "version": "1.33.0",
   "type": "module",
   "workspaces": [
     "apps/*",

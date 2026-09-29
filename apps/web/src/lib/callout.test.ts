@@ -9,14 +9,9 @@ import {
   fillCallout,
   nextUpCallout,
   playerCallout,
-  renameCourtTexts,
-  renamePlayerTexts,
-  setCourtText,
-  setPlayerText,
   spoken,
   testVoiceText,
   unknownPlaceholders,
-  wordingOf,
 } from './callout'
 
 const NAMES = ['Ann', 'Bob', 'Cal', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo']
@@ -151,42 +146,6 @@ describe('the club’s own wording', () => {
   })
 })
 
-describe('a court’s and a player’s own wording', () => {
-  const texts = {
-    courtCall: 'Club: {players} to {court}',
-    playerWaiting: 'Club: {name}',
-    courts: { 'court 1': { courtCall: 'Court one only: {players}' } },
-    players: { ann: { playerWaiting: 'Ann only: {name} is #{place}' } },
-  }
-
-  it('comes before the club’s, and a court’s never applies to a player call-out', () => {
-    expect(wordingOf('courtCall', texts, { court: 'Court 1' })).toBe('Court one only: {players}')
-    expect(wordingOf('courtCall', texts, { court: 'Court 2' })).toBe('Club: {players} to {court}')
-    expect(wordingOf('playerWaiting', texts, { player: 'ANN', court: 'Court 1' })).toBe('Ann only: {name} is #{place}')
-    expect(wordingOf('playerWaiting', texts, { player: 'Bob' })).toBe('Club: {name}')
-    expect(wordingOf('courtGame', texts, { court: 'Court 1' })).toBe('{court}: {players}.')
-  })
-
-  it('is read on the court and for the player it belongs to', () => {
-    const s = withPlayers(createSession('doubles', 2), [3, 3, 3, 3, 3])
-    const group = nextGroups(s)[0].group
-    expect(courtCallout(s, s.courts[0], group, texts)).toMatch(/^Court one only: /)
-    expect(courtCallout(s, s.courts[1], group, texts)).toMatch(/^Club: .+ to Court 2$/)
-    expect(playerCallout(s, 5, nextGroups(s), texts)).toBe('Club: Eve')
-  })
-
-  it('is set, cleared and renamed without touching the rest', () => {
-    let next = setCourtText({ nextUp: 'x' }, ' Center Court ', 'courtGame', ' {court}! ')
-    expect(next).toEqual({ nextUp: 'x', courts: { 'center court': { courtGame: '{court}!' } } })
-    next = renameCourtTexts(next, 'Center Court', 'Stadium')
-    expect(next.courts).toEqual({ stadium: { courtGame: '{court}!' } })
-    expect(setCourtText(next, 'Stadium', 'courtGame', ' ')).toEqual({ nextUp: 'x' })
-    const players = setPlayerText({}, 'Ann', 'playerNextUp', '{name} up')
-    expect(renamePlayerTexts(players, 'Ann', 'Anne')).toEqual({ players: { anne: { playerNextUp: '{name} up' } } })
-    expect(renamePlayerTexts(players, 'Bob', 'Rob')).toBe(players)
-  })
-})
-
 describe('every placeholder', () => {
   it('fills team, partner and the game for a player on a court, in doubles and singles', () => {
     const s = fillCourts(withPlayers(createSession('doubles', 1), [3, 3, 3, 3]))
@@ -229,6 +188,31 @@ describe('every placeholder', () => {
     expect(testVoiceText({ testVoice: '{name} on {team} with {partner}, {court}, {level}, number {place}' })).toBe(
       'Ann on Blue with Bob, Court 1, 3.5 plus, number 3',
     )
-    expect(calloutSample('{name} to {court}', { name: 'Zoe', court: 'Stadium' })).toBe('Zoe to Stadium')
+    expect(testVoiceText({ testVoice: '{bluePlayer1}, {bluePlayer2}, {orangePlayer1}, {orangePlayer2}' })).toBe('Ann, Bob, Cal, Dee')
+  })
+})
+
+describe('each player of a team', () => {
+  it('fills {bluePlayer1} to {orangePlayer2} in board order, on a court and in Next up', () => {
+    const s = fillCourts(withPlayers(createSession('doubles', 1), [3, 3, 3, 3, 3, 3, 3, 3]))
+    const [[b1, b2], [o1, o2]] = s.courts[0].teams!.map((team) => team.map((id) => s.players[id].name))
+    const wording = '{bluePlayer1}+{bluePlayer2} v {orangePlayer1}+{orangePlayer2}'
+    expect(courtCallout(s, s.courts[0], null, { courtGame: wording })).toBe(`${b1}+${b2} v ${o1}+${o2}`)
+
+    const lanes = nextGroups(s)
+    const [[nb1, nb2], [no1, no2]] = lanes[0].group!.teams.map((team) => team.map((id) => s.players[id].name))
+    expect(nextUpCallout(s, lanes, { nextUp: wording })).toBe(`${nb1}+${nb2} v ${no1}+${no2}`)
+    const next = lanes[0].group!.players[0]
+    expect(playerCallout(s, next, lanes, { playerNextUp: `{name}: ${wording}` })).toBe(
+      `${s.players[next].name}: ${nb1}+${nb2} v ${no1}+${no2}`,
+    )
+  })
+
+  it('leaves the 2s empty in singles', () => {
+    const s = fillCourts(withPlayers(createSession('singles', 1), [3, 3]))
+    const [[blue], [orange]] = s.courts[0].teams!.map((team) => team.map((id) => s.players[id].name))
+    expect(courtCallout(s, s.courts[0], null, { courtGame: '{bluePlayer1}|{bluePlayer2}|{orangePlayer1}|{orangePlayer2}' })).toBe(
+      `${blue}||${orange}|`,
+    )
   })
 })

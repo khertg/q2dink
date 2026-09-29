@@ -24,14 +24,19 @@ export const isVoiceId = (value: unknown): value is string => typeof value === '
 
 /**
  * A placeholder a call-out's wording can use, filled in at each tap. For Ann & Bob (Blue) against Cal & Dee (Orange) on
- * Court 1, a 3.5+ court: {bluePlayers} "Ann and Bob", {orangePlayers} "Cal and Dee", {players} "Ann and Bob, against Cal
- * and Dee", {court} "Court 1", {level} "3.5 plus", and for the player called, {name} "Ann", {team} "Blue", {partner}
+ * Court 1, a 3.5+ court: {bluePlayers} "Ann and Bob", {orangePlayers} "Cal and Dee", {bluePlayer1} "Ann", {bluePlayer2}
+ * "Bob", {orangePlayer1} "Cal", {orangePlayer2} "Dee" (the 2s are empty in singles), {players} "Ann and Bob, against
+ * Cal and Dee", {court} "Court 1", {level} "3.5 plus", and for the player called, {name} "Ann", {team} "Blue", {partner}
  * "Bob" and, while waiting, {place} "3".
  */
 export const CALLOUT_PLACEHOLDERS = [
   'players',
   'bluePlayers',
   'orangePlayers',
+  'bluePlayer1',
+  'bluePlayer2',
+  'orangePlayer1',
+  'orangePlayer2',
   'court',
   'level',
   'name',
@@ -41,7 +46,7 @@ export const CALLOUT_PLACEHOLDERS = [
 ] as const
 export type CalloutPlaceholder = (typeof CALLOUT_PLACEHOLDERS)[number]
 
-const GAME = ['players', 'bluePlayers', 'orangePlayers'] as const
+const GAME = ['players', 'bluePlayers', 'orangePlayers', 'bluePlayer1', 'bluePlayer2', 'orangePlayer1', 'orangePlayer2'] as const
 
 /** Every text behind a speaker a club can change, with the wording it has until then and the placeholders it can use. */
 export const CALLOUT_TEXTS = {
@@ -74,82 +79,28 @@ export const CALLOUT_TEXTS = {
 export type CalloutTextKey = keyof typeof CALLOUT_TEXTS
 export const CALLOUT_TEXT_KEYS = Object.keys(CALLOUT_TEXTS) as CalloutTextKey[]
 
-/** The call-outs a court can have its own wording for, and a player. */
-export const COURT_TEXT_KEYS = ['courtGame', 'courtCall'] as const satisfies readonly CalloutTextKey[]
-export const PLAYER_TEXT_KEYS = ['playerCourt', 'playerNextUp', 'playerWaiting'] as const satisfies readonly CalloutTextKey[]
-export type CourtTexts = Partial<Record<(typeof COURT_TEXT_KEYS)[number], string>>
-export type PlayerTexts = Partial<Record<(typeof PLAYER_TEXT_KEYS)[number], string>>
+/** A club's own wording, only for what it changed (the rest uses CALLOUT_TEXTS). */
+export type CalloutTexts = Partial<Record<CalloutTextKey, string>>
 
-/**
- * A club's own wording, only for what it changed (the rest uses CALLOUT_TEXTS), plus a court's or a player's own
- * wording, by lower-case name, over the club's.
- */
-export type CalloutTexts = Partial<Record<CalloutTextKey, string>> & {
-  courts?: Record<string, CourtTexts>
-  players?: Record<string, PlayerTexts>
-}
-
-/** The longest wording of one call-out, and how many courts and players can have their own. */
+/** The longest wording of one call-out. */
 export const CALLOUT_TEXT_MAX_CHARS = 200
-export const CALLOUT_MAX_COURTS = 50
-export const CALLOUT_MAX_PLAYERS = 500
-const MAX_NAME_CHARS = 80
-
-/** How a court or player is keyed in CalloutTexts: its name, trimmed, in lower case. */
-export const calloutTarget = (name: string) => name.trim().toLowerCase()
-
-type Parsed<T> = T | null | 'invalid'
-
-/** One wording: trimmed; null when empty (the default); 'invalid' when not text or too long. */
-function parseText(value: unknown): Parsed<string> {
-  if (value === undefined || value === null) return null
-  if (typeof value !== 'string') return 'invalid'
-  const text = value.trim()
-  if (text.length > CALLOUT_TEXT_MAX_CHARS) return 'invalid'
-  return text || null
-}
-
-/** The given keys' wording from `raw`; null when there is none. */
-function parseGroup<K extends string>(raw: unknown, keys: readonly K[]): Parsed<Partial<Record<K, string>>> {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return 'invalid'
-  const out: Partial<Record<K, string>> = {}
-  for (const key of keys) {
-    const text = parseText((raw as Record<string, unknown>)[key])
-    if (text === 'invalid') return 'invalid'
-    if (text) out[key] = text
-  }
-  return Object.keys(out).length > 0 ? out : null
-}
-
-/** A map of courts or players to their own wording; null when there is none. */
-function parseTargets<K extends string>(raw: unknown, keys: readonly K[], max: number): Parsed<Record<string, Partial<Record<K, string>>>> {
-  if (raw === undefined || raw === null) return null
-  if (typeof raw !== 'object' || Array.isArray(raw)) return 'invalid'
-  const entries = Object.entries(raw as Record<string, unknown>)
-  if (entries.length > max) return 'invalid'
-  const out: Record<string, Partial<Record<K, string>>> = {}
-  for (const [name, value] of entries) {
-    const target = calloutTarget(name)
-    if (!target || target.length > MAX_NAME_CHARS) return 'invalid'
-    const group = parseGroup(value, keys)
-    if (group === 'invalid') return 'invalid'
-    if (group) out[target] = { ...out[target], ...group }
-  }
-  return Object.keys(out).length > 0 ? out : null
-}
 
 /**
- * A fresh copy with known texts only, each trimmed; an empty one is left out (its default), and so is a court or player
- * left with none. Null when a text is too long or there are too many courts or players.
+ * A fresh copy with known texts only, each trimmed; an empty one is left out (its default). Anything else (such as a
+ * court's or player's own wording from an older app) is ignored. Null when a text is not text or too long.
  */
 export function parseCalloutTexts(raw: unknown): CalloutTexts | null {
-  const general = parseGroup(raw, CALLOUT_TEXT_KEYS)
-  if (general === 'invalid') return null
-  const record = raw as Record<string, unknown>
-  const courts = parseTargets(record.courts, COURT_TEXT_KEYS, CALLOUT_MAX_COURTS)
-  const players = parseTargets(record.players, PLAYER_TEXT_KEYS, CALLOUT_MAX_PLAYERS)
-  if (courts === 'invalid' || players === 'invalid') return null
-  return { ...general, ...(courts ? { courts } : {}), ...(players ? { players } : {}) }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const texts: CalloutTexts = {}
+  for (const key of CALLOUT_TEXT_KEYS) {
+    const value = (raw as Record<string, unknown>)[key]
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string') return null
+    const text = value.trim()
+    if (text.length > CALLOUT_TEXT_MAX_CHARS) return null
+    if (text) texts[key] = text
+  }
+  return texts
 }
 
 /** `GET /voice` and the answer to `PUT /voice` (staff): the club's choice, and whether this server has ElevenLabs. */

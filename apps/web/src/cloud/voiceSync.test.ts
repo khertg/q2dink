@@ -17,7 +17,7 @@ import { clubVoiceFor, useClubVoiceStore } from '@/lib/voiceStore'
 import { useSessionStore } from '@/store/session'
 import type { CloudApi } from './api'
 import { useClubAuth } from './auth'
-import { moveCalloutWording, saveClubVoice, syncVoice } from './sync'
+import { saveClubVoice, syncVoice } from './sync'
 
 const downtown = { slug: 'downtown', name: 'Downtown', token: 'tok-1' }
 const uptown = { slug: 'uptown', name: 'Uptown', token: 'tok-2' }
@@ -91,20 +91,6 @@ describe('the club’s call-out voice on this device', () => {
     await vi.waitFor(() => expect(clubs.get('tok-1')?.voice).toBe('device'))
     expect(clubVoiceFor('downtown').texts).toEqual({ nextUp: 'Coming up: {players}' })
     expect(useClubVoiceStore.getState().pending).toBe(false)
-  })
-
-  it('moves a court’s or player’s own wording to their new name, and sends it', async () => {
-    const texts = { courts: { 'center court': { courtGame: '{players}!' } }, players: { ann: { playerWaiting: '{name}?' } } }
-    const { cloudApi, clubs } = fakeApi({ 'tok-1': { voice: 'elevenlabs', texts } })
-    await syncVoice(cloudApi)
-    moveCalloutWording('court', 'Center Court', 'Stadium', cloudApi)
-    moveCalloutWording('player', 'Ann', 'Anne', cloudApi)
-    await vi.waitFor(() => expect(clubs.get('tok-1')?.texts?.players).toEqual({ anne: { playerWaiting: '{name}?' } }))
-    expect(clubs.get('tok-1')?.texts?.courts).toEqual({ stadium: { courtGame: '{players}!' } })
-    // Someone with no wording of their own: nothing to send.
-    const before = useClubVoiceStore.getState()
-    moveCalloutWording('player', 'Bob', 'Rob', cloudApi)
-    expect(useClubVoiceStore.getState()).toBe(before)
   })
 
   it('follows a change made on another device', async () => {

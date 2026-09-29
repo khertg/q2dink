@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Coffee, MessageSquareText, MoreVerticalIcon, UserMinus, UserX, Volume2 } from 'lucide-react'
+import { ArrowRightLeft, Coffee, MoreVerticalIcon, UserMinus, UserX, Volume2 } from 'lucide-react'
 import { useState, type ComponentProps } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -24,8 +24,6 @@ interface Props extends SwapProps {
   breakBlocked?: string
   /** What Call out reads out for this player (see lib/callout.ts); no item without it. */
   callout?: string | null
-  /** Signed in to a club: change what Call out says for this player. */
-  onEditCallout?: () => void
 }
 
 /**
@@ -41,7 +39,6 @@ export function PlayerMenu({
   removeBlocked,
   breakBlocked,
   callout,
-  onEditCallout,
   ...swap
 }: Props) {
   const [swapping, setSwapping] = useState(false)
@@ -49,9 +46,6 @@ export function PlayerMenu({
   const removeLabel = swap.mode === 'nextUp' ? 'Remove from Next up' : 'Remove from court'
   const items = [
     ...(callout ? [{ label: 'Call out', icon: Volume2, onClick: () => void announce(callout), blocked: undefined, danger: false }] : []),
-    ...(callout && onEditCallout
-      ? [{ label: 'Call-out wording…', icon: MessageSquareText, onClick: onEditCallout, blocked: undefined, danger: false }]
-      : []),
     { label: 'Swap…', icon: ArrowRightLeft, onClick: () => setSwapping(true), blocked: undefined, danger: false },
     ...(partner ? [{ ...partnerItem(partner), blocked: undefined, danger: false }] : []),
     ...(onRemove ? [{ label: removeLabel, icon: UserMinus, onClick: onRemove, blocked: removeBlocked, danger: false }] : []),

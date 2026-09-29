@@ -1,16 +1,6 @@
-import {
-  CALLOUT_TEXT_KEYS,
-  CALLOUT_TEXT_MAX_CHARS,
-  CALLOUT_TEXTS,
-  COURT_TEXT_KEYS,
-  PLAYER_TEXT_KEYS,
-  type CalloutTextKey,
-  type CalloutTexts,
-  type CourtTexts,
-  type PlayerTexts,
-} from '@q2dink/shared'
-import { RotateCcw, Volume2, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { CALLOUT_TEXT_KEYS, CALLOUT_TEXT_MAX_CHARS, CALLOUT_TEXTS, type CalloutTextKey, type CalloutTexts } from '@q2dink/shared'
+import { RotateCcw, Volume2 } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { saveClubVoice } from '@/cloud/sync'
 import { Button } from '@/components/ui/button'
@@ -24,121 +14,82 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { calloutSample, changedTexts, setCourtText, setPlayerText, unknownPlaceholders, wordingOf } from '@/lib/callout'
+import { calloutSample, changedTexts, unknownPlaceholders } from '@/lib/callout'
 import { announce } from '@/lib/useAnnouncer'
 import { useClubVoice } from '@/lib/voiceStore'
 
-/**
- * Whose wording is edited: the club's (all its texts, or only `keys`), or one court's or one player's own, which is read
- * instead of the club's for them.
- */
-export type WordingScope =
-  | { kind: 'club'; keys?: readonly CalloutTextKey[] }
-  | { kind: 'court'; name: string }
-  | { kind: 'player'; name: string }
+type Draft = Record<CalloutTextKey, string>
+
+/** Every text as the editor shows it: the club's, or the default. */
+const draftOf = (texts: CalloutTexts): Draft =>
+  Object.fromEntries(CALLOUT_TEXT_KEYS.map((key) => [key, texts[key] ?? CALLOUT_TEXTS[key].text])) as Draft
 
 interface Props {
-  scope: WordingScope
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-/** Change what the call-outs say, for the whole club (saved for the club and sent to all its staff devices). */
-export function CalloutTextsDialog({ scope, open, onOpenChange }: Props) {
+/**
+ * Change what the call-outs say, for the whole club (saved for the club and sent to all its staff devices). Opened from
+ * the club panel, the Call-out voice dialog and the session menu.
+ */
+export function CalloutTextsDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         {/* Mounted only while open, so it always starts from the club's wording as it is now. */}
-        {open && <WordingEditor initial={scope} onClose={() => onOpenChange(false)} />}
+        {open && <WordingEditor onClose={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-const keysOf = (scope: WordingScope): readonly CalloutTextKey[] =>
-  scope.kind === 'court' ? COURT_TEXT_KEYS : scope.kind === 'player' ? PLAYER_TEXT_KEYS : (scope.keys ?? CALLOUT_TEXT_KEYS)
-
-/** A court's or player's own wording (empty: none), or the club's (its default when it has none). */
-function draftOf(scope: WordingScope, texts: CalloutTexts): Partial<Record<CalloutTextKey, string>> {
-  const own = (key: CalloutTextKey) =>
-    scope.kind === 'court'
-      ? (texts.courts?.[scope.name.trim().toLowerCase()]?.[key as keyof CourtTexts] ?? '')
-      : scope.kind === 'player'
-        ? (texts.players?.[scope.name.trim().toLowerCase()]?.[key as keyof PlayerTexts] ?? '')
-        : (texts[key] ?? CALLOUT_TEXTS[key].text)
-  return Object.fromEntries(keysOf(scope).map((key) => [key, own(key)]))
-}
-
-function WordingEditor({ initial, onClose }: { initial: WordingScope; onClose: () => void }) {
+function WordingEditor({ onClose }: { onClose: () => void }) {
   const { texts } = useClubVoice()
-  const [scope, setScope] = useState(initial)
-  const [draft, setDraft] = useState(() => draftOf(initial, texts))
-  // The court and player wordings, in the club's scope, so they can be removed there.
-  const [overrides, setOverrides] = useState({ courts: texts.courts ?? {}, players: texts.players ?? {} })
+  const [draft, setDraft] = useState(() => draftOf(texts))
   const inputs = useRef<Partial<Record<CalloutTextKey, HTMLInputElement | null>>>({})
-  const target = scope.kind === 'club' ? undefined : scope.name
-  const own = scope.kind !== 'club'
+  // Where the cursor goes once an inserted placeholder is on screen.
+  const cursorAfter = useRef<{ key: CalloutTextKey; at: number } | null>(null)
 
-  function switchTo(next: WordingScope) {
-    setScope(next)
-    setDraft(draftOf(next, texts))
-  }
+  // Right after the new text is rendered, before anything else is typed, so typing carries on after the placeholder.
+  useLayoutEffect(() => {
+    const pending = cursorAfter.current
+    if (!pending) return
+    cursorAfter.current = null
+    const input = inputs.current[pending.key]
+    input?.focus()
+    input?.setSelectionRange(pending.at, pending.at)
+  }, [draft])
 
   /** Put a placeholder where the cursor is (or at the end). */
   function insert(key: CalloutTextKey, placeholder: string) {
     const input = inputs.current[key]
-    const value = draft[key] ?? ''
+    const value = draft[key]
     const at = input?.selectionStart ?? value.length
     const end = input?.selectionEnd ?? at
     const next = `${value.slice(0, at)}{${placeholder}}${value.slice(end)}`.slice(0, CALLOUT_TEXT_MAX_CHARS)
+    cursorAfter.current = { key, at: Math.min(at + placeholder.length + 2, next.length) }
     setDraft((d) => ({ ...d, [key]: next }))
-    requestAnimationFrame(() => {
-      input?.focus()
-      const cursor = at + placeholder.length + 2
-      input?.setSelectionRange(cursor, cursor)
-    })
   }
 
   function save() {
-    let next: CalloutTexts
-    if (scope.kind === 'court') {
-      next = COURT_TEXT_KEYS.reduce((t, key) => setCourtText(t, scope.name, key, draft[key] ?? ''), texts)
-    } else if (scope.kind === 'player') {
-      next = PLAYER_TEXT_KEYS.reduce((t, key) => setPlayerText(t, scope.name, key, draft[key] ?? ''), texts)
-    } else {
-      // Only the rows shown change; the club's other texts stay.
-      const shown = keysOf(scope)
-      const general = Object.fromEntries(CALLOUT_TEXT_KEYS.filter((k) => !shown.includes(k) && texts[k]).map((k) => [k, texts[k]]))
-      const courts = Object.keys(overrides.courts).length > 0 ? { courts: overrides.courts } : {}
-      const players = Object.keys(overrides.players).length > 0 ? { players: overrides.players } : {}
-      next = { ...general, ...changedTexts(draft), ...courts, ...players }
-    }
-    saveClubVoice({ texts: next })
-    toast(own ? `Call-out wording saved for ${target}.` : 'Call-out wording saved for the club.')
+    saveClubVoice({ texts: changedTexts(draft) })
+    toast('Call-out wording saved for the club.')
     onClose()
   }
-
-  const removable = [
-    ...Object.entries(overrides.courts).map(([name, group]) => ({ map: 'courts' as const, name, keys: Object.keys(group) })),
-    ...Object.entries(overrides.players).map(([name, group]) => ({ map: 'players' as const, name, keys: Object.keys(group) })),
-  ]
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{own ? `Call-out wording for ${target}` : 'Call-out wording'}</DialogTitle>
+        <DialogTitle>Call-out wording</DialogTitle>
         <DialogDescription>
-          {own
-            ? `What is said for ${target} only, instead of the club’s wording. Leave a text empty to use the club’s.`
-            : 'What each call-out says, for every staff device of the club. Words in braces are filled in at each tap.'}
+          What each call-out says, for every staff device of the club. Words in braces are filled in at each tap.
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
-        {keysOf(scope).map((key) => {
-          const { label, placeholders } = CALLOUT_TEXTS[key]
-          const value = draft[key] ?? ''
-          // What is read when this text is empty: the club's wording for a court or player, the default for the club.
-          const fallback = own ? wordingOf(key, texts) : CALLOUT_TEXTS[key].text
+        {CALLOUT_TEXT_KEYS.map((key) => {
+          const { label, text: fallback, placeholders } = CALLOUT_TEXTS[key]
+          const value = draft[key]
           const unknown = unknownPlaceholders(key, value)
           const id = `callout-text-${key}`
           return (
@@ -151,7 +102,6 @@ function WordingEditor({ initial, onClose }: { initial: WordingScope; onClose: (
                     inputs.current[key] = el
                   }}
                   value={value}
-                  placeholder={own ? `Uses the club’s: ${fallback}` : undefined}
                   maxLength={CALLOUT_TEXT_MAX_CHARS}
                   onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
                   aria-invalid={unknown.length > 0}
@@ -162,14 +112,7 @@ function WordingEditor({ initial, onClose }: { initial: WordingScope; onClose: (
                   size="icon"
                   aria-label={`Test ${label}`}
                   title="Test"
-                  onClick={() =>
-                    void announce(
-                      calloutSample(value.trim() || fallback, {
-                        court: scope.kind === 'court' ? scope.name : undefined,
-                        name: scope.kind === 'player' ? scope.name : undefined,
-                      }),
-                    )
-                  }
+                  onClick={() => void announce(calloutSample(value.trim() || fallback))}
                 >
                   <Volume2 aria-hidden="true" />
                 </Button>
@@ -178,9 +121,9 @@ function WordingEditor({ initial, onClose }: { initial: WordingScope; onClose: (
                   variant="ghost"
                   size="icon"
                   aria-label={`Reset ${label}`}
-                  title={own ? 'Use the club’s wording' : 'Back to the default'}
-                  disabled={own ? value === '' : value === CALLOUT_TEXTS[key].text}
-                  onClick={() => setDraft((d) => ({ ...d, [key]: own ? '' : CALLOUT_TEXTS[key].text }))}
+                  title="Back to the default"
+                  disabled={value === fallback}
+                  onClick={() => setDraft((d) => ({ ...d, [key]: fallback }))}
                 >
                   <RotateCcw aria-hidden="true" />
                 </Button>
@@ -207,48 +150,6 @@ function WordingEditor({ initial, onClose }: { initial: WordingScope; onClose: (
             </div>
           )
         })}
-        {own && (
-          <Button
-            type="button"
-            variant="link"
-            className="h-auto p-0"
-            onClick={() => switchTo({ kind: 'club', keys: keysOf(scope) })}
-          >
-            Edit the club’s wording instead
-          </Button>
-        )}
-        {scope.kind === 'club' && removable.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Court and player wording</p>
-            <ul className="divide-y rounded-md border">
-              {removable.map(({ map, name, keys }) => (
-                <li key={`${map}-${name}`} className="flex items-center gap-2 px-2 py-1 text-sm">
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="capitalize">{name}</span>
-                    <span className="text-muted-foreground">
-                      {' · '}
-                      {keys.map((k) => CALLOUT_TEXTS[k as CalloutTextKey]?.label ?? k).join(', ')}
-                    </span>
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Remove the wording for ${name}`}
-                    onClick={() =>
-                      setOverrides((o) => {
-                        const { [name]: _removed, ...rest } = o[map]
-                        return { ...o, [map]: rest }
-                      })
-                    }
-                  >
-                    <X aria-hidden="true" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>

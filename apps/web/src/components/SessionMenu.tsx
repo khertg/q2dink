@@ -12,6 +12,7 @@ import {
   SlidersHorizontalIcon,
   Volume2Icon,
   MegaphoneIcon,
+  MessageSquareTextIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -20,6 +21,7 @@ import { leaveOpenSession } from '@/cloud/sync'
 import { viewerUrl } from '@/cloud/url'
 import { ActivityDialog } from '@/components/ActivityDialog'
 import { CalloutVoiceSetting } from '@/components/CalloutVoiceSetting'
+import { CalloutTextsDialog } from '@/components/CalloutTextsDialog'
 import { SayDialog } from '@/components/SayDialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EndSessionDialog } from '@/components/EndSessionDialog'
@@ -34,7 +36,7 @@ import { isLive, MAX_COURTS, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
 
-type ActiveDialog = 'rename' | 'courts' | 'share' | 'activity' | 'voice' | 'say' | 'end' | null
+type ActiveDialog = 'rename' | 'courts' | 'share' | 'activity' | 'voice' | 'wording' | 'say' | 'end' | null
 
 /** Rename the session, manage courts, share the live view and end the session, tucked behind one button. */
 export function SessionMenu({ session }: { session: SessionState }) {
@@ -193,6 +195,18 @@ export function SessionMenu({ session }: { session: SessionState }) {
               </Button>
             </PopoverClose>
           )}
+          {club && (
+            <PopoverClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => setActive('wording')}
+              >
+                <MessageSquareTextIcon aria-hidden="true" /> Edit wording…
+              </Button>
+            </PopoverClose>
+          )}
           <div className="border-t pt-1">
             <PopoverClose asChild>
               <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => void leave()}>
@@ -264,6 +278,9 @@ export function SessionMenu({ session }: { session: SessionState }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+      {club && (
+        <CalloutTextsDialog open={active === 'wording'} onOpenChange={(open) => setActive(open ? 'wording' : null)} />
       )}
       <SayDialog open={active === 'say'} onOpenChange={(open) => setActive(open ? 'say' : null)} />
       <EndSessionDialog

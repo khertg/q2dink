@@ -1,4 +1,4 @@
-import { Coffee, MessageSquareText, MoreVerticalIcon, UserX, Volume2 } from 'lucide-react'
+import { Coffee, MoreVerticalIcon, UserX, Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { partnerItem, type PartnerOption } from '@/components/partnerItem'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -12,12 +12,10 @@ interface Props {
   partner?: PartnerOption
   /** What Call out reads out for this player (see lib/callout.ts); no item without it. */
   callout?: string | null
-  /** Signed in to a club: change what Call out says for this player. */
-  onEditCallout?: () => void
 }
 
 /** The ⋮ menu on a waiting player's row (Board queue, Check-in): Call out, Lock partner, Take a break, Remove from session. */
-export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, partner, callout, onEditCallout }: Props) {
+export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, partner, callout }: Props) {
   if (!onTakeBreak && !onRemoveFromSession && !partner && !callout) return null
   const lock = partner && partnerItem(partner)
   return (
@@ -33,14 +31,6 @@ export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, part
             <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => void announce(callout)}>
               <Volume2 aria-hidden="true" />
               Call out
-            </Button>
-          </PopoverClose>
-        )}
-        {callout && onEditCallout && (
-          <PopoverClose asChild>
-            <Button type="button" variant="ghost" className="w-full justify-start" onClick={onEditCallout}>
-              <MessageSquareText aria-hidden="true" />
-              Call-out wording…
             </Button>
           </PopoverClose>
         )}

@@ -187,7 +187,7 @@ export function CalloutVoiceSetting() {
           <MessageSquareText aria-hidden="true" /> Edit wording…
         </Button>
       </div>
-      <CalloutTextsDialog scope={{ kind: 'club' }} open={editingTexts} onOpenChange={setEditingTexts} />
+      <CalloutTextsDialog open={editingTexts} onOpenChange={setEditingTexts} />
     </fieldset>
   )
 }

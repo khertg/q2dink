@@ -260,6 +260,20 @@ describe('migrations', () => {
     await db.close()
   })
 
+  it('keep only the club’s own call-out wording, dropping a court’s and a player’s', async () => {
+    const db = await connectDb('pglite://memory')
+    const before = MIGRATIONS.findIndex((m) => m.id === '017_club_callout_texts_club_only')
+    await migrate(db, MIGRATIONS.slice(0, before))
+    await db.query("insert into clubs (slug, name, password_hash, recovery_hash) values ('aaa', 'A', 'x', 'x')")
+    await db.query(
+      "insert into club_callout_texts (club_slug, scope, target, key, text) values ('aaa', 'club', '', 'nextUp', 'Up'), ('aaa', 'court', 'court 1', 'courtGame', 'x'), ('aaa', 'player', 'ann', 'playerWaiting', 'y')",
+    )
+    await migrate(db)
+    const rows = await db.query('select scope, key from club_callout_texts')
+    expect(rows.rows).toEqual([{ scope: 'club', key: 'nextUp' }])
+    await db.close()
+  })
+
   it('keep the session a club was running, and its live board, when clubs start running several', async () => {
     const db = await connectDb('pglite://memory')
     const before = MIGRATIONS.findIndex((m) => m.id === '010_multi_session')

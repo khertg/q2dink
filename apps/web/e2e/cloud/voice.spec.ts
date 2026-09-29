@@ -169,11 +169,11 @@ test('the club changes what a call-out says, and every call-out of that kind fol
     .toEqual({})
 })
 
-test('each speaker’s wording is changed right there: a court’s own, a player’s own, and the Test voice sentence', async ({
+test('the session menu edits the club’s wording, which every speaker then reads, with no per-court or per-player editing', async ({
   page,
   request,
 }) => {
-  const club = uniqueClub('Speakers')
+  const club = uniqueClub('Session wording')
   const { token } = await apiCreateClub(request, club)
   await recordDeviceVoice(page)
   await signIn(page, club)
@@ -183,50 +183,38 @@ test('each speaker’s wording is changed right there: a court’s own, a player
   await startSession(page, { courts: 2 })
   await checkIn(page, ['Ann', 'Bob', 'Cy', 'Dee'])
 
-  // Court 1's own wording, from the pencil beside its speaker.
-  const court1 = page.getByRole('region', { name: 'Court 1', exact: true })
-  await court1.getByRole('button', { name: 'Edit wording of Court 1' }).click()
-  const courtDialog = page.getByRole('dialog', { name: 'Call-out wording for Court 1' })
-  await courtDialog.getByRole('textbox', { name: 'Calling players to a court', exact: true }).fill('{players}, to the center court!')
-  await courtDialog.getByRole('button', { name: 'Save' }).click()
-  await expect.poll(clubTexts).toMatchObject({ courts: { 'court 1': { courtCall: '{players}, to the center court!' } } })
-  await court1.getByRole('button', { name: 'Announce Court 1' }).click()
-  await expect.poll(lastSaid).toMatch(/, to the center court!$/)
-  await page.getByRole('region', { name: 'Court 2', exact: true }).getByRole('button', { name: 'Announce Court 2' }).click()
-  await expect.poll(lastSaid).toMatch(/, please go to Court 2\.$/)
+  // Nothing to edit at a speaker or in a player's menu any more.
+  await expect(page.getByRole('button', { name: /^Edit wording of / })).toHaveCount(0)
+  await page.getByRole('group', { name: 'Next up' }).getByRole('button', { name: 'Options for Ann' }).click()
+  const menu = page.locator('[data-slot="popover-content"]')
+  await expect(menu.getByRole('button', { name: 'Call out', exact: true })).toBeVisible()
+  await expect(menu.getByRole('button', { name: 'Call-out wording…' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
 
-  // Ann's own wording, from her menu in Next up, with a placeholder put in by its chip.
-  const nextUp = page.getByRole('group', { name: 'Next up' })
-  await nextUp.getByRole('button', { name: 'Options for Ann' }).click()
-  await page.locator('[data-slot="popover-content"]').getByRole('button', { name: 'Call-out wording…' }).click()
-  const annDialog = page.getByRole('dialog', { name: 'Call-out wording for Ann' })
-  await annDialog.getByRole('textbox', { name: 'A player who is next up', exact: true }).fill('{name}, your table is ready, ')
-  await annDialog.getByRole('button', { name: 'Insert {team} into A player who is next up' }).click()
-  await expect(annDialog.getByRole('textbox', { name: 'A player who is next up', exact: true })).toHaveValue('{name}, your table is ready, {team}')
-  await annDialog.getByRole('button', { name: 'Save' }).click()
-  await expect.poll(clubTexts).toMatchObject({ players: { ann: { playerNextUp: '{name}, your table is ready, {team}' } } })
-  await nextUp.getByRole('button', { name: 'Options for Ann' }).click()
-  await page.locator('[data-slot="popover-content"]').getByRole('button', { name: 'Call out', exact: true }).click()
-  await expect.poll(lastSaid).toMatch(/^Ann, your table is ready, (Blue|Orange)$/)
-  await nextUp.getByRole('button', { name: 'Options for Bob' }).click()
-  await page.locator('[data-slot="popover-content"]').getByRole('button', { name: 'Call out', exact: true }).click()
-  await expect.poll(lastSaid).toBe('Bob, you are next up. Please get ready.')
+  await openSessionMenu(page)
+  await page.getByRole('button', { name: 'Edit wording…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Call-out wording' })
+  const courtCall = dialog.getByRole('textbox', { name: 'Calling players to a court', exact: true })
+  await courtCall.fill('Blue, ')
+  await dialog.getByRole('button', { name: 'Insert {bluePlayer1} into Calling players to a court' }).click()
+  await courtCall.pressSequentially(', to {court}!')
+  await expect(courtCall).toHaveValue('Blue, {bluePlayer1}, to {court}!')
+  await dialog.getByRole('textbox', { name: 'Test voice', exact: true }).fill('Testing {orangePlayer2} on {court}')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect
+    .poll(clubTexts)
+    .toEqual({ courtCall: 'Blue, {bluePlayer1}, to {court}!', testVoice: 'Testing {orangePlayer2} on {court}' })
 
-  // The Test voice sentence, and removing Ann's wording from the club's list.
+  // Every court reads the club's wording.
+  for (const name of ['Court 1', 'Court 2']) {
+    await page.getByRole('region', { name, exact: true }).getByRole('button', { name: `Announce ${name}` }).click()
+    await expect.poll(lastSaid).toMatch(new RegExp(`^Blue, (Ann|Bob|Cy|Dee), to ${name}!$`))
+  }
+
   await openSessionMenu(page)
   await page.getByRole('button', { name: 'Call-out voice…' }).click()
-  const voiceDialog = page.getByRole('dialog', { name: 'Call-out voice' })
-  await voiceDialog.getByRole('button', { name: 'Edit wording…' }).click()
-  const clubDialog = page.getByRole('dialog', { name: 'Call-out wording' })
-  await clubDialog.getByRole('textbox', { name: 'Test voice', exact: true }).fill('Testing {court} for {name}')
-  await clubDialog.getByRole('button', { name: 'Remove the wording for ann' }).click()
-  await clubDialog.getByRole('button', { name: 'Save' }).click()
-  await expect.poll(clubTexts).toEqual({
-    testVoice: 'Testing {court} for {name}',
-    courts: { 'court 1': { courtCall: '{players}, to the center court!' } },
-  })
-  await voiceDialog.getByRole('button', { name: 'Test voice' }).click()
-  await expect.poll(lastSaid).toBe('Testing Court 1 for Ann')
+  await page.getByRole('dialog', { name: 'Call-out voice' }).getByRole('button', { name: 'Test voice' }).click()
+  await expect.poll(lastSaid).toBe('Testing Dee on Court 1')
 })
 
 test('with no voices of its own, the account’s list offers the default and says how to add more', async ({ page, request }) => {

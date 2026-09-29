@@ -1,6 +1,5 @@
 import { Fragment, useState } from 'react'
 import { AnnounceButton } from '@/components/AnnounceButton'
-import type { WordingScope } from '@/components/CalloutTextsDialog'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { PlayerMenu } from '@/components/PlayerMenu'
 import type { PartnerOption } from '@/components/partnerItem'
@@ -69,8 +68,6 @@ interface Props {
   announceText?: string | null
   /** Staff only: what Call out in a player's menu reads out (see lib/callout.ts). */
   calloutFor?: (playerId: number) => string | null
-  /** Signed in to a club: change what a speaker or a player's Call out says (the wording editor, in that scope). */
-  onEditWording?: (scope: WordingScope) => void
 }
 
 export interface NextUpLane {
@@ -95,7 +92,6 @@ type TeamsProps = Pick<
   | 'editable'
   | 'queuedAt'
   | 'calloutFor'
-  | 'onEditWording'
 > & {
   /** One per spot, Blue then Orange: a player, or null for an open spot. */
   spots: (number | null)[]
@@ -148,11 +144,7 @@ export function NextUpCard({
           <span className="flex items-center gap-1">
             Next up
             {announceText !== undefined && (
-              <AnnounceButton
-                text={announceText}
-                label="Next up"
-                onEdit={shared.onEditWording && (() => shared.onEditWording?.({ kind: 'club', keys: ['nextUp', 'levelPrefix'] }))}
-              />
+              <AnnounceButton text={announceText} label="Next up" />
             )}
           </span>
           {picked && onReset && (
@@ -211,7 +203,6 @@ function GroupTeams({
   editable = false,
   queuedAt,
   calloutFor,
-  onEditWording,
 }: TeamsProps) {
   const now = useSessionNow()
   const half = spots.length / 2
@@ -268,7 +259,6 @@ function GroupTeams({
                       partner={partnerFor?.(id)}
                       removeBlocked={removeBlocked?.(id)}
                       callout={calloutFor?.(id)}
-                      onEditCallout={onEditWording && players[id] && (() => onEditWording({ kind: 'player', name: players[id].name }))}
                     />
                   )}
                 </PlayerTile>

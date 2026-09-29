@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { moveCalloutWording } from '@/cloud/sync'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -141,7 +140,6 @@ function CourtRow({ court, index, count }: RowProps) {
     }
     try {
       renameCourt(court.id, draft)
-      moveCalloutWording('court', court.name, draft)
       setDraft(null)
       setError(null)
     } catch (err) {

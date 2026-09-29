@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CALLOUT_MAX_COURTS,
   CALLOUT_TEXT_KEYS,
   CALLOUT_TEXT_MAX_CHARS,
   CALLOUT_TEXTS,
@@ -86,27 +85,14 @@ describe('call-out wording', () => {
   })
 })
 
-describe('a court’s and a player’s own wording', () => {
-  it('is kept by lower-case name, only for the call-outs each can have', () => {
+describe('wording from an older app', () => {
+  it('ignores a court’s or a player’s own wording, keeping the club’s', () => {
     expect(
       parseCalloutTexts({
         testVoice: ' Hello {name} ',
-        courts: { ' Center Court ': { courtCall: '{players}, to the center!', playerWaiting: 'x' }, Empty: { courtGame: ' ' } },
-        players: { Ann: { playerWaiting: '{name}, your table is ready', courtGame: 'x' } },
+        courts: { 'center court': { courtCall: 'x' } },
+        players: { ann: { playerWaiting: 'y' } },
       }),
-    ).toEqual({
-      testVoice: 'Hello {name}',
-      courts: { 'center court': { courtCall: '{players}, to the center!' } },
-      players: { ann: { playerWaiting: '{name}, your table is ready' } },
-    })
-  })
-
-  it('refuses too many, a too long text or a name that is too long', () => {
-    const many = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`c${i}`, { courtGame: 'x' }]))
-    expect(parseCalloutTexts({ courts: many(CALLOUT_MAX_COURTS) })).not.toBeNull()
-    expect(parseCalloutTexts({ courts: many(CALLOUT_MAX_COURTS + 1) })).toBeNull()
-    expect(parseCalloutTexts({ players: { ann: { playerWaiting: 'a'.repeat(201) } } })).toBeNull()
-    expect(parseCalloutTexts({ players: { ['a'.repeat(81)]: { playerWaiting: 'x' } } })).toBeNull()
-    expect(parseCalloutTexts({ players: ['ann'] })).toBeNull()
+    ).toEqual({ testVoice: 'Hello {name}' })
   })
 })

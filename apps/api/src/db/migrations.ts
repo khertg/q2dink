@@ -299,4 +299,12 @@ export const MIGRATIONS: Migration[] = [
       alter table clubs drop column callout_texts;
     `,
   },
+  {
+    id: '017_club_callout_texts_club_only',
+    sql: `
+      -- Call-out wording is the club's only now: a court's or a player's own wording is no longer kept. The scope and
+      -- target columns stay, always 'club' and ''.
+      delete from club_callout_texts where scope <> 'club';
+    `,
+  },
 ]

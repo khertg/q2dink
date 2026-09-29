@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronUp, Gauge, MoreVerticalIcon, Pause, Pencil, Play, X, XCircle } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { moveCalloutWording } from '@/cloud/sync'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -49,7 +48,6 @@ function RenameCourtDialog({ court, open, onOpenChange }: { court: Court; open: 
     if (name.trim() === court.name) return onOpenChange(false)
     try {
       renameCourt(court.id, name)
-      moveCalloutWording('court', court.name, name)
       toast(`${court.name} renamed to ${name.trim()}`)
       onOpenChange(false)
     } catch (err) {

@@ -35,7 +35,6 @@ import {
 import { ratingOf } from '@/lib/skill'
 import { useClubScale } from '@/lib/skillScaleStore'
 import { clubVoiceFor, useClubVoiceStore } from '@/lib/voiceStore'
-import { renameCourtTexts, renamePlayerTexts } from '@/lib/callout'
 import {
   addPendingRename,
   clearPendingRenames,
@@ -433,18 +432,6 @@ export function saveClubVoice(
         : 'Call-outs now use ElevenLabs',
   )
   void syncVoice(api)
-}
-
-/**
- * A court or player was renamed: their own call-out wording (kept by name, as names are copies) moves to the new name.
- * Nothing happens when they have none, or no club is signed in.
- */
-export function moveCalloutWording(kind: 'court' | 'player', from: string, to: string, api: CloudApi | null = cloud): void {
-  const slug = useClubAuth.getState().club?.slug
-  if (!slug) return
-  const { texts } = clubVoiceFor(slug)
-  const next = kind === 'court' ? renameCourtTexts(texts, from, to) : renamePlayerTexts(texts, from, to)
-  if (next !== texts) saveClubVoice({ texts: next }, api)
 }
 
 /**
