@@ -4,6 +4,7 @@
  * the app under the same policy that production uses.
  *
  * - `data:` and `blob:` images are the player avatars (stored as data URLs) and the crop step.
+ * - `blob:` media is a voice call-out's audio from the server (lib/announcer.ts), played from memory.
  * - `unsafe-inline` styles are React `style` attributes (avatar colours, the crop frame).
  * - Everything else is the app's own files and its own /api.
  */
@@ -12,6 +13,7 @@ export const CONTENT_SECURITY_POLICY = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
   "font-src 'self'",
   "connect-src 'self'",
   "worker-src 'self'",

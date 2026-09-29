@@ -158,6 +158,20 @@ describe('configuration', () => {
     expect(config.rateLimit.auth.max).toBe(3)
   })
 
+  it('reads the voice call-out settings, with no key by default', () => {
+    const defaults = loadConfig(base)
+    expect(defaults.speech).toMatchObject({ apiKey: undefined, model: 'eleven_flash_v2_5', timeoutMs: 8000 })
+    expect(defaults.rateLimit.speech.max).toBe(30)
+    const config = loadConfig({
+      ...base,
+      ELEVENLABS_API_KEY: 'k',
+      ELEVENLABS_MODEL: 'eleven_multilingual_v2',
+      RATE_LIMIT_SPEECH_MAX: '5',
+    })
+    expect(config.speech).toMatchObject({ apiKey: 'k', model: 'eleven_multilingual_v2' })
+    expect(config.rateLimit.speech.max).toBe(5)
+  })
+
   it('refuses to start in production without a real database', () => {
     expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/DATABASE_URL is required/)
     expect(() => loadConfig({ NODE_ENV: 'production', DATABASE_URL: 'pglite://memory' })).toThrow(/development only/)
@@ -215,6 +229,7 @@ describe('migrations', () => {
     expect(tables.rows.map((t) => t.table_name)).toEqual([
       'audit_log',
       'club_avatars',
+      'club_callout_texts',
       'club_card_logos',
       'club_devices',
       'club_players',
@@ -228,6 +243,20 @@ describe('migrations', () => {
       'session_history',
       'session_presence',
     ])
+    await db.close()
+  })
+
+  it('move a club’s call-out wording from its column into rows', async () => {
+    const db = await connectDb('pglite://memory')
+    const before = MIGRATIONS.findIndex((m) => m.id === '016_club_callout_texts')
+    await migrate(db, MIGRATIONS.slice(0, before))
+    await db.query("insert into clubs (slug, name, password_hash, recovery_hash) values ('aaa', 'A', 'x', 'x'), ('bbb', 'B', 'x', 'x')")
+    await db.query("update clubs set callout_texts = $1::jsonb where slug = 'aaa'", [
+      JSON.stringify({ nextUp: 'Coming up: {players}', madeUp: 'x' }),
+    ])
+    await migrate(db)
+    const rows = await db.query('select club_slug, scope, target, key, text from club_callout_texts')
+    expect(rows.rows).toEqual([{ club_slug: 'aaa', scope: 'club', target: '', key: 'nextUp', text: 'Coming up: {players}' }])
     await db.close()
   })
 

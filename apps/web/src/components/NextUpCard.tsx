@@ -1,4 +1,6 @@
 import { Fragment, useState } from 'react'
+import { AnnounceButton } from '@/components/AnnounceButton'
+import type { WordingScope } from '@/components/CalloutTextsDialog'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { PlayerMenu } from '@/components/PlayerMenu'
 import type { PartnerOption } from '@/components/partnerItem'
@@ -60,6 +62,15 @@ interface Props {
    * `emptyMessage` and `spots`), each under its label such as "3.5+" or "Any level".
    */
   lanes?: NextUpLane[]
+  /**
+   * Staff only: what the speaker button reads out (see lib/callout.ts), null while nobody can be called.
+   * Without it there is no button, as on the live page.
+   */
+  announceText?: string | null
+  /** Staff only: what Call out in a player's menu reads out (see lib/callout.ts). */
+  calloutFor?: (playerId: number) => string | null
+  /** Signed in to a club: change what a speaker or a player's Call out says (the wording editor, in that scope). */
+  onEditWording?: (scope: WordingScope) => void
 }
 
 export interface NextUpLane {
@@ -83,6 +94,8 @@ type TeamsProps = Pick<
   | 'onSkillChange'
   | 'editable'
   | 'queuedAt'
+  | 'calloutFor'
+  | 'onEditWording'
 > & {
   /** One per spot, Blue then Orange: a player, or null for an open spot. */
   spots: (number | null)[]
@@ -106,6 +119,7 @@ export function NextUpCard({
   lanes,
   slotsPerTeam = 2,
   onFillSpot,
+  announceText,
   ...shared
 }: Props) {
   // The open spot being filled; the pop-up to choose who is open while this is set.
@@ -131,7 +145,16 @@ export function NextUpCard({
     <Card role="group" aria-label="Next up">
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2">
-          <span>Next up</span>
+          <span className="flex items-center gap-1">
+            Next up
+            {announceText !== undefined && (
+              <AnnounceButton
+                text={announceText}
+                label="Next up"
+                onEdit={shared.onEditWording && (() => shared.onEditWording?.({ kind: 'club', keys: ['nextUp', 'levelPrefix'] }))}
+              />
+            )}
+          </span>
           {picked && onReset && (
             <span className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
               Chosen by staff
@@ -187,6 +210,8 @@ function GroupTeams({
   onSkillChange,
   editable = false,
   queuedAt,
+  calloutFor,
+  onEditWording,
 }: TeamsProps) {
   const now = useSessionNow()
   const half = spots.length / 2
@@ -242,6 +267,8 @@ function GroupTeams({
                       onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
                       partner={partnerFor?.(id)}
                       removeBlocked={removeBlocked?.(id)}
+                      callout={calloutFor?.(id)}
+                      onEditCallout={onEditWording && players[id] && (() => onEditWording({ kind: 'player', name: players[id].name }))}
                     />
                   )}
                 </PlayerTile>

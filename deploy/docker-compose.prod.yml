@@ -37,6 +37,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-q2dink}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}@db:5432/${POSTGRES_DB:-q2dink}
       TRUST_PROXY: "true" # the real client address arrives from Caddy, so rate limits are per person
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Voice call-outs (optional): without a key, devices read call-outs with their own voice.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-}
+      RATE_LIMIT_SPEECH_MAX: ${RATE_LIMIT_SPEECH_MAX:-}
     depends_on:
       db:
         condition: service_healthy

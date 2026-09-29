@@ -23,6 +23,8 @@ import {
   type SkillScaleBody,
   type StaffAvatar,
   type StaffAvatarIndex,
+  type VoiceOptions,
+  type VoiceSettings,
 } from '@q2dink/shared'
 import { CloudError, type CloudApi } from './api'
 
@@ -211,6 +213,29 @@ export function createHttpApi(baseUrl: string, options: Options = {}): CloudApi 
 
     async listDevices(token) {
       return (await request<{ devices: ClubDevice[] }>('GET', '/devices', { token })).devices
+    },
+
+    fetchVoice: (token) => request<VoiceSettings>('GET', '/voice', { token }),
+
+    putVoice: (token, choice) => request<VoiceSettings>('PUT', '/voice', { token, body: choice }),
+
+    fetchVoiceOptions: (token) => request<VoiceOptions>('GET', '/voice/options', { token }),
+
+    async speak(token, text, signal, voiceId) {
+      // Audio, not JSON, so not through `request` (errors still come back as JSON).
+      let response: Response
+      try {
+        response = await doFetch(`${base}/speech`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify(voiceId ? { text, voiceId } : { text }),
+          signal,
+        })
+      } catch {
+        throw new CloudError('network')
+      }
+      if (!response.ok) throw errorFrom(response.status, await response.json().catch(() => null))
+      return response.blob()
     },
 
     async putAvatar(token, key, avatar) {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { CalloutTextsDialog, type WordingScope } from '@/components/CalloutTextsDialog'
 import { CourtCard } from '@/components/CourtCard'
 import { CourtGrid } from '@/components/CourtGrid'
 import { MatchLog } from '@/components/MatchLog'
@@ -8,7 +9,9 @@ import { LockPartnerDialog } from '@/components/LockPartnerDialog'
 import { QueueList } from '@/components/QueueList'
 import { RemovePlayerDialog } from '@/components/RemovePlayerDialog'
 import type { Candidate } from '@/components/ReplacePlayerDialog'
+import { courtCallout, nextUpCallout, playerCallout } from '@/lib/callout'
 import { waitingMessage } from '@/lib/nextUp'
+import { useClubVoice } from '@/lib/voiceStore'
 import { playerStatuses } from '@/lib/playerStatus'
 import { removedMessage } from '@/lib/removal'
 import { levelLabel, sessionScale } from '@/lib/skill'
@@ -23,6 +26,7 @@ import { isNextUpPicked, nextGroup, nextGroups, nextUpSpots, nextUpStandIn, sess
 import { hasLevelCourts, sameLevels } from '@/rotation/levels'
 import type { Court, SessionState, Teams } from '@/rotation/types'
 import { useSessionStore } from '@/store/session'
+import { useClubAuth } from '@/cloud/auth'
 
 /** When a previewed change would happen (only the order of events matters to it, never the exact time). */
 const clock = () => Date.now()
@@ -83,6 +87,13 @@ export function BoardScreen({ session }: { session: SessionState }) {
   const candidates: Candidate[] = statuses.map((status) => ({ player: session.players[status.id], status }))
   const statusOf = (id: number) => statuses.find((s) => s.id === id)
   const slotsPerTeam = session.mode === 'doubles' ? 2 : 1
+  // What the speaker buttons and each player's Call out read out loud, in the club's wording.
+  const { texts } = useClubVoice()
+  // Signed in to a club: each speaker and Call out can change its wording, saved for the club.
+  const signedIn = useClubAuth((s) => !!s.club)
+  const [wording, setWording] = useState<WordingScope | null>(null)
+  const onEditWording = signedIn ? setWording : undefined
+  const calloutFor = (id: number) => playerCallout(session, id, lanes, texts)
   // Games start only while the session's clock runs.
   const status = sessionStatus(session)
   const stoppedReason =
@@ -273,6 +284,9 @@ export function BoardScreen({ session }: { session: SessionState }) {
             startState={startStateFor(court)}
             waitingMessage={waitingMessage(session, court.levels)}
             nextHere={nextHereFor(court)}
+            announceText={courtCallout(session, court, court.teams ? null : groupFor(court), texts)}
+            calloutFor={calloutFor}
+            onEditWording={onEditWording}
             onStart={(options) => handleStart(court.id, options)}
             stoppedReason={stoppedReason}
             onReplace={(outId, inId, options) => handleReplace(court.id, outId, inId, options.sendOnBreak)}
@@ -312,6 +326,9 @@ export function BoardScreen({ session }: { session: SessionState }) {
         editable
         queuedAt={session.queuedAt}
         lanes={levelLanes}
+        announceText={nextUpCallout(session, lanes, texts)}
+        calloutFor={calloutFor}
+        onEditWording={onEditWording}
       />
       <QueueList
         session={session}
@@ -321,6 +338,8 @@ export function BoardScreen({ session }: { session: SessionState }) {
         onRemoveFromSession={setRemoving}
         partnerFor={partnerFor}
         editable
+        calloutFor={calloutFor}
+        onEditWording={onEditWording}
       />
       <MatchLog
         matches={session.matches ?? []}
@@ -330,6 +349,11 @@ export function BoardScreen({ session }: { session: SessionState }) {
       />
       <LockPartnerDialog session={session} playerId={locking} onClose={() => setLocking(null)} />
       {lockGuardDialog}
+      <CalloutTextsDialog
+        scope={wording ?? { kind: 'club' }}
+        open={wording !== null}
+        onOpenChange={(open) => !open && setWording(null)}
+      />
       <RemovePlayerDialog
         session={session}
         playerId={removing}

@@ -11,7 +11,7 @@
 		Strict-Transport-Security "max-age=31536000"
 		Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
 		# Keep this identical to apps/web/csp.ts (a unit test checks it): scripts and everything else only from this site.
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 

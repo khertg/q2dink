@@ -23,6 +23,7 @@ export function testConfig(overrides: ConfigOverrides = {}): Config {
       global: { max: 100_000, windowMs: 60_000 },
       auth: { max: 100_000, windowMs: 60_000 },
       write: { max: 100_000, windowMs: 60_000 },
+      speech: { max: 100_000, windowMs: 60_000 },
       ...rateLimit,
     },
     loginLockout: { ...base.loginLockout, maxFailuresPerClubAndIp: 100_000, maxFailuresPerClub: 100_000, ...loginLockout },

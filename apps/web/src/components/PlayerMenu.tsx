@@ -1,9 +1,10 @@
-import { ArrowRightLeft, Coffee, MoreVerticalIcon, UserMinus, UserX } from 'lucide-react'
+import { ArrowRightLeft, Coffee, MessageSquareText, MoreVerticalIcon, UserMinus, UserX, Volume2 } from 'lucide-react'
 import { useState, type ComponentProps } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ReplacePlayerDialog } from '@/components/ReplacePlayerDialog'
 import { partnerItem, type PartnerOption } from '@/components/partnerItem'
+import { announce } from '@/lib/useAnnouncer'
 import type { RosterPlayer } from '@/rotation/types'
 
 type SwapProps = Omit<ComponentProps<typeof ReplacePlayerDialog>, 'open' | 'onOpenChange' | 'player'> & {
@@ -21,18 +22,36 @@ interface Props extends SwapProps {
   removeBlocked?: string
   /** Why Take a break cannot be done right now. */
   breakBlocked?: string
+  /** What Call out reads out for this player (see lib/callout.ts); no item without it. */
+  callout?: string | null
+  /** Signed in to a club: change what Call out says for this player. */
+  onEditCallout?: () => void
 }
 
 /**
- * The ⋮ menu on a player's tile, on a court or in Next up: Swap, Remove from court (or from Next up),
+ * The ⋮ menu on a player's tile, on a court or in Next up: Call out, Swap, Remove from court (or from Next up),
  * Take a break, Remove from session. Only the last one takes them out of the session; the others keep
  * them in it (in the queue or on a break).
  */
-export function PlayerMenu({ onRemove, onTakeBreak, onRemoveFromSession, partner, removeBlocked, breakBlocked, ...swap }: Props) {
+export function PlayerMenu({
+  onRemove,
+  onTakeBreak,
+  onRemoveFromSession,
+  partner,
+  removeBlocked,
+  breakBlocked,
+  callout,
+  onEditCallout,
+  ...swap
+}: Props) {
   const [swapping, setSwapping] = useState(false)
   const name = swap.player.name
   const removeLabel = swap.mode === 'nextUp' ? 'Remove from Next up' : 'Remove from court'
   const items = [
+    ...(callout ? [{ label: 'Call out', icon: Volume2, onClick: () => void announce(callout), blocked: undefined, danger: false }] : []),
+    ...(callout && onEditCallout
+      ? [{ label: 'Call-out wording…', icon: MessageSquareText, onClick: onEditCallout, blocked: undefined, danger: false }]
+      : []),
     { label: 'Swap…', icon: ArrowRightLeft, onClick: () => setSwapping(true), blocked: undefined, danger: false },
     ...(partner ? [{ ...partnerItem(partner), blocked: undefined, danger: false }] : []),
     ...(onRemove ? [{ label: removeLabel, icon: UserMinus, onClick: onRemove, blocked: removeBlocked, danger: false }] : []),

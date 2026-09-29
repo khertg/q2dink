@@ -30,6 +30,9 @@ services:
     environment:
       DATABASE_URL: postgres://q2dink:q2dink@db:5432/q2dink
       PORT: "8787"
+      # Voice call-outs: set ELEVENLABS_API_KEY in your shell (or a .env beside this file) to hear the ElevenLabs voice.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-}
     depends_on:
       db:
         condition: service_healthy

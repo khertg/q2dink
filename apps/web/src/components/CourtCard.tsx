@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CancelGameDialog } from '@/components/CancelGameDialog'
 import { CourtMenu } from '@/components/CourtMenu'
+import { AnnounceButton } from '@/components/AnnounceButton'
+import type { WordingScope } from '@/components/CalloutTextsDialog'
 import { ReplacePlayerDialog, type Candidate } from '@/components/ReplacePlayerDialog'
 import { ScoreDialog } from '@/components/ScoreDialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -58,6 +60,12 @@ interface Props {
   waitingMessage?: string
   /** On a court kept for a level range: the group that would start here, as "Ann & Bob vs Cy & Dee". */
   nextHere?: string
+  /** Staff only: what the speaker button reads out (see lib/callout.ts); no button while null or missing. */
+  announceText?: string | null
+  /** Staff only: what Call out in a player's menu reads out (see lib/callout.ts). */
+  calloutFor?: (playerId: number) => string | null
+  /** Signed in to a club: change what a speaker or a player's Call out says (the wording editor, in that scope). */
+  onEditWording?: (scope: WordingScope) => void
   /** Start the next group here, or (on a court set up by hand) exactly the players on it. */
   onStart?: (options?: { ignoreMode?: boolean }) => void
   /** Record the game from its score (Blue, then Orange). Asked for after a Won button is pressed. */
@@ -119,6 +127,9 @@ export function CourtCard({
   startState = 'none',
   waitingMessage = 'Waiting for players to check in',
   nextHere,
+  announceText,
+  calloutFor,
+  onEditWording,
   onStart,
   onScore,
   onCancel,
@@ -159,6 +170,13 @@ export function CourtCard({
             />
           </span>
           <div className="flex shrink-0 items-center gap-2">
+            {!readOnly && announceText !== undefined && (
+              <AnnounceButton
+                text={announceText}
+                label={court.name}
+                onEdit={onEditWording && (() => onEditWording({ kind: 'court', name: court.name }))}
+              />
+            )}
             {court.teams ? <PlayingBadge court={court} /> : <Badge variant="outline">Open</Badge>}
             {!readOnly && position && (
               <CourtMenu
@@ -237,6 +255,8 @@ export function CourtCard({
                             onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
                             onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
                             partner={partnerFor?.(id)}
+                            callout={calloutFor?.(id)}
+                            onEditCallout={onEditWording && (() => onEditWording({ kind: 'player', name: players[id].name }))}
                           />
                         )}
                       </PlayerTile>

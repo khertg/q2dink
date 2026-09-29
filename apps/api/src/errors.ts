@@ -16,6 +16,8 @@ const STATUS: Record<ErrorCode, number> = {
   internal_error: 500,
   conflict: 409,
   name_taken: 409,
+  speech_unavailable: 503,
+  speech_failed: 502,
 }
 
 const MESSAGE: Record<ErrorCode, string> = {
@@ -34,6 +36,8 @@ const MESSAGE: Record<ErrorCode, string> = {
   internal_error: 'Something went wrong on the server.',
   conflict: 'The session changed on another staff device.',
   name_taken: 'Another device of this club is already called that.',
+  speech_unavailable: 'Voice call-outs are not available on this server right now.',
+  speech_failed: 'The voice service did not answer.',
 }
 
 /** An expected failure that maps to a specific HTTP status and error code. */

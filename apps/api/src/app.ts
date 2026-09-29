@@ -11,7 +11,9 @@ import { registerClubRoutes } from './routes/clubs'
 import { registerLiveRoutes } from './routes/live'
 import { registerMediaRoutes } from './routes/media'
 import { registerSessionRoutes } from './routes/session'
+import { registerSpeechRoutes } from './routes/speech'
 import { LoginGuard } from './services/loginGuard'
+import { SpeechService } from './services/speech'
 import { apiCommit, apiVersion } from './version'
 
 export interface AppDeps {
@@ -23,6 +25,8 @@ export interface AppDeps {
   logger?: FastifyServerOptions['logger']
   /** Where log lines go (tests capture them); defaults to stdout. */
   logStream?: NodeJS.WritableStream
+  /** How the voice service is called; tests pass a fake so they never reach ElevenLabs. */
+  speechFetch?: typeof fetch
 }
 
 /** What the route modules share. */
@@ -31,6 +35,7 @@ export interface RouteDeps {
   config: Config
   hub: LiveHub
   guard: LoginGuard
+  speech: SpeechService
 }
 
 const REDACT = ['req.headers.authorization', 'req.headers.cookie']
@@ -106,7 +111,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     reply.code(404).send({ error: 'not_found', message: defaultMessage('not_found') }),
   )
 
-  const routeDeps: RouteDeps = { db, config, hub, guard }
+  const speech = new SpeechService(config.speech, deps.speechFetch)
+  const routeDeps: RouteDeps = { db, config, hub, guard, speech }
   await app.register(
     async (api) => {
       api.get('/health', { config: { rateLimit: false } }, async () => {
@@ -118,6 +124,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerLiveRoutes(api, routeDeps)
       registerMediaRoutes(api, routeDeps)
       registerAuditRoutes(api, routeDeps)
+      registerSpeechRoutes(api, routeDeps)
     },
     { prefix: '/api' },
   )

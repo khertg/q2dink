@@ -7,14 +7,14 @@ export const teamName = (team: 'A' | 'B') => (team === 'A' ? 'Blue' : 'Orange')
  * Open a player's ⋮ menu on a card (a court, or Next up) and choose one of its items. The menu opens
  * in a popover outside the card, so the item is found on the page.
  */
-export async function playerAction(scope: Locator | Page, name: string, item: 'Swap…' | 'Lock partner…' | 'Remove from court' | 'Remove from Next up' | 'Take a break' | 'Remove from session') {
+export async function playerAction(scope: Locator | Page, name: string, item: 'Call out' | 'Swap…' | 'Lock partner…' | 'Remove from court' | 'Remove from Next up' | 'Take a break' | 'Remove from session') {
   await scope.getByRole('button', { name: `Options for ${name}` }).click()
   const page = 'page' in scope ? scope.page() : scope
   await page.locator('[data-slot="popover-content"]').getByRole('button', { name: item }).click()
 }
 
 /** On the Check-in tab, open a waiting player's ⋮ menu and choose one of its items. */
-export async function waitingAction(page: Page, name: string, item: 'Take a break' | 'Remove from session') {
+export async function waitingAction(page: Page, name: string, item: 'Call out' | 'Take a break' | 'Remove from session') {
   const trigger = page.getByRole('list', { name: 'Waiting players' }).getByRole('button', { name: `${name} menu` })
   // Mid-screen, so the menu does not open under the check-in toasts at the bottom of a phone screen.
   await trigger.evaluate((el) => el.scrollIntoView({ block: 'center' }))

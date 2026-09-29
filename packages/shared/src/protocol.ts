@@ -22,6 +22,8 @@ export const ERROR_CODES = [
   'internal_error',
   'conflict',
   'name_taken',
+  'speech_unavailable',
+  'speech_failed',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

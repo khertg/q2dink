@@ -34,6 +34,8 @@ import {
 } from '@q2dink/shared'
 import { ratingOf } from '@/lib/skill'
 import { useClubScale } from '@/lib/skillScaleStore'
+import { clubVoiceFor, useClubVoiceStore } from '@/lib/voiceStore'
+import { renameCourtTexts, renamePlayerTexts } from '@/lib/callout'
 import {
   addPendingRename,
   clearPendingRenames,
@@ -57,7 +59,7 @@ import { isLive, lastActivityAt, sessionStatus } from '@/rotation/engine'
 import type { SessionState } from '@/rotation/types'
 import { openBelongsTo, useSessionStore } from '@/store/session'
 import { belongsTo, confirmSlice, notAppliedAudits, parkedFor, parkedUnsent, rebaseSlice, sliceOf, type SessionSlice } from '@/store/slices'
-import type { CardLogoChoice } from '@q2dink/shared'
+import type { CalloutTexts, CalloutVoice, CardLogoChoice } from '@q2dink/shared'
 import { CloudError, type CloudApi, type PutAvatarRequest } from './api'
 import { dropAuditOfOtherClubs, onAuditQueued, queueAudit, recordAudit, removeSentAudit, unsentAudit } from './audit'
 import { useClubAuth } from './auth'
@@ -255,6 +257,7 @@ async function runSync(api: CloudApi): Promise<void> {
     syncHistory(api),
     syncMedia(api),
     syncSkillScale(api),
+    syncVoice(api),
     syncCardLogos(api),
     renamed ? exchangeRoster(api) : Promise.resolve(false),
   ])
@@ -374,6 +377,77 @@ export async function pickCardLogo(choice: CardLogoChoice, label: string, api: C
 }
 
 /**
+ * The club's call-out voice: a change made here for this club goes up; otherwise the club's is taken (another staff
+ * device may have changed it). Returns false when the club could not be reached.
+ */
+export async function syncVoice(api: CloudApi | null = cloud): Promise<boolean> {
+  const club = useClubAuth.getState().club
+  if (!api || !club) return false
+  try {
+    const local = useClubVoiceStore.getState()
+    if (local.pending && local.clubSlug === club.slug) {
+      const kept = await api.putVoice(club.token, { voice: local.voice, voiceId: local.voiceId, texts: local.texts ?? {} })
+      if (useClubAuth.getState().club?.slug === club.slug) useClubVoiceStore.getState().markSent(kept, kept.elevenLabs)
+    } else {
+      const settings = await api.fetchVoice(club.token)
+      if (useClubAuth.getState().club?.slug === club.slug) {
+        // An older server has no wording yet: the defaults.
+        useClubVoiceStore.getState().takeClub({ ...settings, texts: settings.texts ?? {} }, settings.elevenLabs, club.slug)
+      }
+    }
+    return true
+  } catch (error) {
+    handleAuthError(error)
+    return false
+  }
+}
+
+/**
+ * Staff changed the club's call-out settings: its voice, its ElevenLabs voice (`voiceId`: null for the default;
+ * `voiceName` for the activity log) or its wording (`texts`, only the changed call-outs). Anything missing keeps what
+ * the club has. Kept here at once, sent to the club (and so its other devices) now or with the next sync.
+ */
+export function saveClubVoice(
+  choice: { voice?: CalloutVoice; voiceId?: string | null; voiceName?: string; texts?: CalloutTexts },
+  api: CloudApi | null = cloud,
+): void {
+  const slug = useClubAuth.getState().club?.slug
+  const current = clubVoiceFor(slug)
+  useClubVoiceStore.getState().setLocal(
+    {
+      voice: choice.voice ?? current.voice,
+      voiceId: choice.voiceId === undefined ? current.voiceId : choice.voiceId,
+      texts: choice.texts ?? current.texts,
+    },
+    slug,
+  )
+  const voiceId = choice.voiceId === undefined ? current.voiceId : choice.voiceId
+  recordAudit(
+    'calloutVoice',
+    choice.texts !== undefined
+      ? 'Changed the call-out wording'
+      : choice.voiceId !== undefined
+      ? `Call-out voice: ${choice.voiceName ?? voiceId ?? 'the default voice'}`
+      : choice.voice === 'device'
+        ? 'Call-outs now use each device’s own voice'
+        : 'Call-outs now use ElevenLabs',
+  )
+  void syncVoice(api)
+}
+
+/**
+ * A court or player was renamed: their own call-out wording (kept by name, as names are copies) moves to the new name.
+ * Nothing happens when they have none, or no club is signed in.
+ */
+export function moveCalloutWording(kind: 'court' | 'player', from: string, to: string, api: CloudApi | null = cloud): void {
+  const slug = useClubAuth.getState().club?.slug
+  if (!slug) return
+  const { texts } = clubVoiceFor(slug)
+  const next = kind === 'court' ? renameCourtTexts(texts, from, to) : renamePlayerTexts(texts, from, to)
+  if (next !== texts) saveClubVoice({ texts: next }, api)
+}
+
+/**
  * What this device has not sent the club yet, for the signed-in club: what a reset of this device would
  * lose. Nothing without a club (a build with no cloud keeps everything on the device only).
  */
@@ -403,6 +477,7 @@ export async function countUnsent(): Promise<UnsentCounts> {
     avatars,
     photoSharing,
     skillLevels: useClubScale.getState().pending && useClubScale.getState().clubSlug === slug,
+    calloutVoice: useClubVoiceStore.getState().pending && useClubVoiceStore.getState().clubSlug === slug,
     cardLogos: logos.length + (logoChoice.dirty ? 1 : 0),
   }
 }

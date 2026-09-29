@@ -253,4 +253,50 @@ export const MIGRATIONS: Migration[] = [
       alter table clubs add column card_logo text;
     `,
   },
+  {
+    id: '013_callout_voice',
+    sql: `
+      -- Which voice reads the club's call-outs: 'elevenlabs' (null, the default) or 'device' (each device's own voice,
+      -- never ElevenLabs, so no credits are used).
+      alter table clubs add column callout_voice text check (callout_voice in ('elevenlabs', 'device'));
+    `,
+  },
+  {
+    id: '014_elevenlabs_voice',
+    sql: `
+      -- The ElevenLabs voice the club chose in the app (null: the default voice).
+      alter table clubs add column elevenlabs_voice_id text check (elevenlabs_voice_id ~ '^[A-Za-z0-9]{1,64}$');
+    `,
+  },
+  {
+    id: '015_callout_texts',
+    sql: `
+      -- The club's own wording of its call-outs, only those it changed ({ "nextUp": "Coming up: {players}" }).
+      alter table clubs add column callout_texts jsonb;
+    `,
+  },
+  {
+    id: '016_club_callout_texts',
+    sql: `
+      -- The club's own wording of its call-outs, one row per text: for the whole club (scope 'club', target ''), or for
+      -- one court or one player (scope 'court'/'player', target = its lower-case name) over the club's.
+      create table club_callout_texts (
+        club_slug  text not null references clubs (slug) on delete cascade,
+        scope      text not null check (scope in ('club', 'court', 'player')),
+        target     text not null default '' check (char_length(target) <= 80),
+        key        text not null check (char_length(key) between 1 and 40),
+        text       text not null check (char_length(text) between 1 and 200),
+        updated_at timestamptz not null default now(),
+        primary key (club_slug, scope, target, key)
+      );
+      -- Wording kept in the column of migration 015 (the club's own, one object) moves to rows.
+      insert into club_callout_texts (club_slug, scope, target, key, text)
+      select c.slug, 'club', '', t.key, t.value
+      from clubs c, jsonb_each_text(c.callout_texts) t
+      where jsonb_typeof(c.callout_texts) = 'object'
+        and t.key in ('nextUp', 'courtGame', 'courtCall', 'playerCourt', 'playerNextUp', 'playerWaiting')
+        and char_length(t.value) between 1 and 200;
+      alter table clubs drop column callout_texts;
+    `,
+  },
 ]

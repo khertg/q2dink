@@ -28,6 +28,14 @@ export interface Config {
     auth: Limit
     /** Publish and clear, per IP. */
     write: Limit
+    /** Voice call-outs, per IP: each one not already cached costs ElevenLabs credits. */
+    speech: Limit
+  }
+  /** Voice call-outs (POST /speech) through ElevenLabs. Without a key the app uses the device's own voice. */
+  speech: {
+    apiKey: string | undefined
+    model: string
+    timeoutMs: number
   }
   loginLockout: {
     maxFailuresPerClubAndIp: number
@@ -37,6 +45,7 @@ export interface Config {
 }
 
 const MINUTE = 60_000
+
 
 function int(env: Record<string, string | undefined>, name: string, fallback: number, min = 0): number {
   const raw = env[name]
@@ -100,6 +109,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       global: { max: int(env, 'RATE_LIMIT_MAX', 300, 1), windowMs: MINUTE },
       auth: { max: int(env, 'RATE_LIMIT_AUTH_MAX', 10, 1), windowMs: 15 * MINUTE },
       write: { max: int(env, 'RATE_LIMIT_WRITE_MAX', 240, 1), windowMs: MINUTE },
+      speech: { max: int(env, 'RATE_LIMIT_SPEECH_MAX', 30, 1), windowMs: MINUTE },
+    },
+    speech: {
+      apiKey: env.ELEVENLABS_API_KEY || undefined,
+      model: env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+      timeoutMs: int(env, 'ELEVENLABS_TIMEOUT_MS', 8000, 1),
     },
     loginLockout: {
       maxFailuresPerClubAndIp: int(env, 'LOGIN_MAX_FAILURES_PER_IP', 5, 1),

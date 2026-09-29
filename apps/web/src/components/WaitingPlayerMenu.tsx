@@ -1,7 +1,8 @@
-import { Coffee, MoreVerticalIcon, UserX } from 'lucide-react'
+import { Coffee, MessageSquareText, MoreVerticalIcon, UserX, Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { partnerItem, type PartnerOption } from '@/components/partnerItem'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { announce } from '@/lib/useAnnouncer'
 
 interface Props {
   name: string
@@ -9,11 +10,15 @@ interface Props {
   /** Take the player out of the session (the caller confirms first). */
   onRemoveFromSession?: () => void
   partner?: PartnerOption
+  /** What Call out reads out for this player (see lib/callout.ts); no item without it. */
+  callout?: string | null
+  /** Signed in to a club: change what Call out says for this player. */
+  onEditCallout?: () => void
 }
 
-/** The ⋮ menu on a waiting player's row (Board queue, Check-in): Lock partner, Take a break, Remove from session. */
-export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, partner }: Props) {
-  if (!onTakeBreak && !onRemoveFromSession && !partner) return null
+/** The ⋮ menu on a waiting player's row (Board queue, Check-in): Call out, Lock partner, Take a break, Remove from session. */
+export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, partner, callout, onEditCallout }: Props) {
+  if (!onTakeBreak && !onRemoveFromSession && !partner && !callout) return null
   const lock = partner && partnerItem(partner)
   return (
     <Popover>
@@ -23,6 +28,22 @@ export function WaitingPlayerMenu({ name, onTakeBreak, onRemoveFromSession, part
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-52 p-1">
+        {callout && (
+          <PopoverClose asChild>
+            <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => void announce(callout)}>
+              <Volume2 aria-hidden="true" />
+              Call out
+            </Button>
+          </PopoverClose>
+        )}
+        {callout && onEditCallout && (
+          <PopoverClose asChild>
+            <Button type="button" variant="ghost" className="w-full justify-start" onClick={onEditCallout}>
+              <MessageSquareText aria-hidden="true" />
+              Call-out wording…
+            </Button>
+          </PopoverClose>
+        )}
         {lock && (
           <PopoverClose asChild>
             <Button type="button" variant="ghost" className="w-full justify-start" onClick={lock.onClick}>

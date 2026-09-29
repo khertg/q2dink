@@ -5,6 +5,7 @@ import { SkillBadge } from '@/components/SkillBadge'
 import { SkillCountPills } from '@/components/SkillCountPills'
 import type { PartnerOption } from '@/components/partnerItem'
 import { WaitingPlayerMenu } from '@/components/WaitingPlayerMenu'
+import type { WordingScope } from '@/components/CalloutTextsDialog'
 import { WaitingTime } from '@/components/WaitingTime'
 import type { SkillLevel } from '@/db/db'
 import { heldFor, lockMarks } from '@/lib/partners'
@@ -25,6 +26,10 @@ interface Props {
   partnerFor?: (playerId: number) => PartnerOption | undefined
   /** Staff only: tap a player's avatar to change it. */
   editable?: boolean
+  /** Staff only: what Call out in a player's menu reads out (see lib/callout.ts). */
+  calloutFor?: (playerId: number) => string | null
+  /** Signed in to a club: change what a speaker or a player's Call out says (the wording editor, in that scope). */
+  onEditWording?: (scope: WordingScope) => void
 }
 
 export function QueueList({
@@ -35,6 +40,8 @@ export function QueueList({
   onRemoveFromSession,
   partnerFor,
   editable = false,
+  calloutFor,
+  onEditWording,
 }: Props) {
   const now = useSessionNow()
   const marks = lockMarks(session)
@@ -82,6 +89,8 @@ export function QueueList({
                     onTakeBreak={onTakeBreak && (() => onTakeBreak(id))}
                     onRemoveFromSession={onRemoveFromSession && (() => onRemoveFromSession(id))}
                     partner={partnerFor?.(id)}
+                    callout={calloutFor?.(id)}
+                    onEditCallout={onEditWording && (() => onEditWording({ kind: 'player', name: player.name }))}
                   />
                 </li>
               )

@@ -16,6 +16,7 @@ import { useRecoveryCode } from '@/cloud/recovery'
 import { recordAudit } from '@/cloud/audit'
 import { flushAudit } from '@/cloud/sync'
 import { PhotoSharingToggle } from '@/components/PhotoSharingToggle'
+import { CalloutVoiceSetting } from '@/components/CalloutVoiceSetting'
 import { RenameDialog } from '@/components/RenameDialog'
 import { ResetDeviceDialog } from '@/components/ResetDeviceDialog'
 import { SharePanel } from '@/components/SharePanel'
@@ -294,6 +295,7 @@ function SignedIn() {
         Live link: <span className="font-mono">{liveBoardPath(club.slug)}</span>
       </p>
       <PhotoSharingToggle />
+      <CalloutVoiceSetting />
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={() => setShareOpen(true)}>
           <QrCodeIcon aria-hidden="true" /> Share live view

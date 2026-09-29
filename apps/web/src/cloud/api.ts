@@ -26,6 +26,9 @@ import type {
   SessionStateRow,
   StaffAvatar,
   StaffAvatarIndex,
+  VoiceChoice,
+  VoiceOptions,
+  VoiceSettings,
 } from '@q2dink/shared'
 
 /**
@@ -155,6 +158,18 @@ export interface CloudApi {
   registerDevice(token: string, device: { id: string; name: string; label: string }): Promise<void>
   /** The club's named devices. */
   listDevices(token: string): Promise<ClubDevice[]>
+
+  /**
+   * A call-out read out by the server's voice (the club's, or `voiceId` to try one), as MP3 audio. Fails with `speech_unavailable` when the
+   * server has no voice service (or it refused), so the device uses its own voice.
+   */
+  speak(token: string, text: string, signal?: AbortSignal, voiceId?: string): Promise<Blob>
+  /** The club's call-out voice, and whether the server has ElevenLabs. */
+  fetchVoice(token: string): Promise<VoiceSettings>
+  /** Choose the club's call-out voice. Returns the club's settings as saved. */
+  putVoice(token: string, choice: VoiceChoice): Promise<VoiceSettings>
+  /** The ElevenLabs voices the server's key can use. */
+  fetchVoiceOptions(token: string): Promise<VoiceOptions>
 }
 
 /** Which part of the audit log to read. */
@@ -188,6 +203,8 @@ const MESSAGES: Record<Exclude<CloudErrorCode, 'unknown'>, string> = {
   internal_error: 'Something went wrong on the server. Please try again.',
   conflict: 'The session changed on another staff device.',
   name_taken: 'Another device of this club already has that name. Pick another one.',
+  speech_unavailable: 'Voice call-outs are not available on the server right now.',
+  speech_failed: 'The voice service did not answer.',
   network: 'Cannot reach the server. Check your connection and try again.',
 }
 
